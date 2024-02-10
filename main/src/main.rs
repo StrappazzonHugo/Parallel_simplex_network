@@ -1,5 +1,10 @@
 use itertools::Itertools;
-use petgraph::{data::Build, graph, prelude::*, visit::{GetAdjacencyMatrix, EdgeCount}};
+use petgraph::{
+    data::Build,
+    graph,
+    prelude::*,
+    visit::{EdgeCount, GetAdjacencyMatrix},
+};
 
 const INF: i32 = 99999999;
 
@@ -81,9 +86,9 @@ fn is_tree(edges: Vec<(usize, usize)>, n: usize) -> bool {
     let (mut left, right): (Vec<_>, Vec<_>) = edges.clone().into_iter().unzip();
     left.extend(right);
     println!("{:?}", left);
- /*   let nodes: Vec<usize> = left.into_iter().dedup().collect();
+    /*   let nodes: Vec<usize> = left.into_iter().dedup().collect();
     nodes.iter().for_each(|&x| {graph.add_node(());});*/
-    let addedge:Vec<(u32, u32)> = edges.iter().map(|x| (x.0 as u32, x.1 as u32)).collect();
+    let addedge: Vec<(u32, u32)> = edges.iter().map(|x| (x.0 as u32, x.1 as u32)).collect();
     graph.extend_with_edges(addedge);
     //println!("{:?}", petgraph::algo::bellman_ford(graph, 0));
     true
