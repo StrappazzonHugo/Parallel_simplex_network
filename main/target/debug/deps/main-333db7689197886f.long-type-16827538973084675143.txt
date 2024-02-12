@@ -1,0 +1,1 @@
+itertools::adaptors::coalesce::CoalesceBy<std::vec::IntoIter<usize>, itertools::adaptors::coalesce::DedupPred2CoalescePred<itertools::adaptors::coalesce::DedupEq>, itertools::adaptors::coalesce::NoCount>
