@@ -1,0 +1,20 @@
+[profile.release-without-debug]
+inherits = "release"
+debug = false 
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true 
+
+[package]
+name = "main"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+debug_print = "1.0.0"
+itertools = "0.12.1"
+num = "0.4.1"
+petgraph = "0.6.4"
