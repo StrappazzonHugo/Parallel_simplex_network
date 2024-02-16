@@ -1,0 +1,89 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{hyperref}
+\newcommand\tab[1][0.5cm]{\hspace*{#1}}
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+\title{Notes}
+\author{Hugo Strappazzon}
+\date{February 2024}
+
+\begin{document}
+
+\maketitle
+
+\section*{Articles}
+\subsection*{Displacement Interpolation Using Lagrangian Mass Transport}
+\href{https://www.researchgate.net/publication/220183864_Displacement_Interpolation_Using_Lagrangian_Mass_Transport}{Link pdf}\\
+\textbf{Mass Transport Problem} :\\
+Transportation Simplex $->$ Earth Moving Distance\\
+Network simplex algorithm (\textit{with block search pivoting ??}) from LEMON graph library $->$ general min-cost flow problems
+Transportation simplex have worst case complexity in $O(n^3)$ but generally behaves in $O(n^2)$ in some context.\\
+
+\noindent\textbf{Limitation} : Problem size $->$ cost matrix storage too heavy for GPU memory.
+Presented method working for interpolation between two distributions, future work idea : interpolation between N distribution (texture mixing)
+
+Radial basis function ?
+
+\subsection*{Minimum-cost flow algorithms: An experimental evaluation}
+\href{https://egres.elte.hu/tr/egres-13-04_September_2013.pdf}{Link pdf}\\
+\textbf{Minimum-cost flow algorithms in the LEMON library :}\\
+
+\noindent\textbf{Spanning tree data structures} :\\
+\noindent ATI (Augmented Threaded Index ) vs  XTI (eXtended Threaded Index ) XTI apparently have better performance for network simplex.\\
+Additional improvement : a reverse thread index is also stored for each node to represent the depth-first traversal as a doubly-linked list.\\
+For initialization of the initial spanning tree solution, adding an artificial root with additionnals arcs between the nodes and the new roots provides better performances.\\
+
+\noindent\textbf{Pivot rules :}\\
+\noindent simplest pivot rules : \textit{best eligible} and \textit{first eligible}.\\
+
+\noindent\textit{block search pivot rule} : cyclically examines certain subsets (blocks) of the arcs and select best candidate at each iteration. Block size seems quite important parameter, set the size proportionally to $|A(G)|$ between 1\% and 10\%. Article experiments suggest $block\_size = \lfloor\sqrt{m}\rfloor$ with (m = $|A(G)|$, the number of arc in graph $G$)\\
+
+\noindent\textit{candidate list pivot rule} : method that examines arcs and build a list of most eligible arcs. The list is then used for at most $K$ iterations. If an arc becomes non-eligible, it is removed from the list. Article suggest : $L = \lfloor\sqrt{m}/4\rfloor$ and $K = \lfloor L/10\rfloor$.\\
+
+\noindent\textit{altering candidate list pivot rule} : improved version of \textit{candidate list pivot rule} presented in the article. It maintain a list of size $K$ of eligible arcs at each iteration, extending and removing arcs only searching in one arc block with size $B$. Article suggest $B = \lfloor\sqrt{m}\rfloor$ and $K = \lfloor B/100\rfloor$.
+
+\subsection*{A networksimplex algorithm with O( n) consecutive degenerate pivots}
+\href{https://www.sciencedirect.com/science/article/abs/pii/S0377221716309493?casa_token=SMqEV_sxidsAAAAA:3CR4u27p_VI9Bk48yrlLN0HKp-sdVPk_YAORscbmIe7yMcQ-zb935FCKALHu8hFgY9NAUE_JDXY}{Link}
+
+\textbf{if} there is an eligible arc (k; l) such that nodes k and l are in the same free component, then pivot in the arc (k; l);
+
+\subsection*{A network simplex method for the budget-constrained minimum cost flow problem}
+\href{https://www.sciencedirect.com/science/article/abs/pii/S0167637702001141?casa_token=Iofw98BgAS0AAAAA:1ULyjeo9cNWUvxOTDPwAj6DMAjnyZmUGLdUGYDWC3CJ_bJVmBRHRPKLiZ8yYPMHjEYUtgQfb5B8}{Link}
+
+
+\section*{Basic simplex network for min-cost flow problem}
+\textbf{Input : } Graph, cost matrix, capacity matrix, source(s) and sink(s)\\
+Compute Initial feasible solution as spanning tree structure (T, L, U)\\
+\textbf{do}\\
+\tab Apply pivot rule $->$ give entering arc\\
+\tab Apply leaving arc rule $->$ give leaving arc\\
+\tab compute new flow\\
+\tab update potential node and reduced cost\\
+\textbf{until} optimality condition\\
+\textbf{Output : } Optimal min-cost flow
+\vspace{15px}\\
+TODO : \\
+change function to manage generic number\\
+refactor \textit{compute\_node\_potential}\\
+modify \textit{Push relabel}\\
+modify algo to reduced max-flow to demand\\
+implement other \textit{pivot rule}\\
+Parallelism model\\
+
+
+
+\newpage
+
+\section*{Ressources}
+
+\noindent repository of Optimized version of Simplex Network from LEMON : \url{https://github.com/nbonneel/network_simplex}\\
+
+\noindent Simplex algo for mincost flow problem : \textit{Network Optimization: Continuous and Discrete Models, p. 201}\\
+
+\noindent NETWORK FLOWS Theory, Algorithms, and Applications (p.417) \url{http://www.dl.behinehyab.com/Ebooks/NETWORK/NET005_354338_www.behinehyab.com.pdf}
+
+
+
+
+\end{document}

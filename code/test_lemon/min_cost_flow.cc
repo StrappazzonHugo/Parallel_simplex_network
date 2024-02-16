@@ -53,7 +53,7 @@ int main() {
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n5, 6);
+  ns.stSupply(n0, n5, 5);
 
   ListDigraph::ArcMap<int> res(g);
   ns.run();

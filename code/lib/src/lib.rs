@@ -1,13 +1,13 @@
 use debug_print::debug_println;
 use itertools::Itertools;
+use num::Num; // not used yet
 use petgraph::algo::bellman_ford;
-//use num; not used yet
 use petgraph::algo::find_negative_cycle;
 use petgraph::dot::Dot;
 use petgraph::graph::node_index;
 use petgraph::graph::DefaultIx;
 use petgraph::graph::EdgeReference;
-use petgraph::matrix_graph::NodeIndex;
+use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 //use std::any::type_name;
 use std::collections::HashMap;
@@ -25,11 +25,6 @@ struct SPTree {
 //TODO can easily be done with functions getcost(graph, i, j)
 //                                       getcapacity(graph, i, j)
 //                                       getflow(graph, i, j)
-trait EdgeIndexed<NUM> {
-    fn cost(i: u32, j: u32) -> NUM;
-    fn capacity(i: u32, j: u32) -> NUM;
-    fn flow(i: u32, j: u32) -> NUM;
-}
 
 #[derive(Debug, Clone)]
 pub struct CustomEdgeIndices<NUM> {
@@ -38,58 +33,27 @@ pub struct CustomEdgeIndices<NUM> {
     pub flow: NUM,
 }
 
-impl<NUM> CustomEdgeIndices<NUM> {
-    fn update_flow(&mut self, x: NUM) {
-        self.flow = x;
-    }
-}
 /*
 fn type_of<T>(_: T) -> &'static str {
     type_name::<T>()
 }*/
 
-//TODO function over generics integer : DiGraph<u32, CustomEdgeIndices<INT>>
+//TODO function over generics integer : DiGraph<u32, CustomEdgeIndices<NUM>>
 fn initialization<'a, NUM, Ix>(
     mut graph: DiGraph<u32, CustomEdgeIndices<i32>>,
 ) -> (SPTree, DiGraph<u32, CustomEdgeIndices<i32>>) {
-    let mut N = graph.node_count();
-    let mut u = vec![0; N * N];
-    //building capacity matrix needed for Push-Relabel algorithm TODO modify PushRelabel such that
-    //it take Digraph structure instead of PRstruct
-    graph.edge_references().for_each(|x| {
-        u[x.source().index() * N + x.target().index()] = x.weight().capacity;
-    });
-    let g = PRstruct {
-        n: N,
-        capacity: u.clone(),
-        flow: vec![0; N * N],
-        label: Vec::new(),
-        excess: Vec::new(),
-        excess_vertices: Vec::new(),
-        seen: Vec::new(),
-    };
 
-    //Supposing source_id = 0 and sink_id = lastnode id
-    //TODO add a way to specify source/sink instead
     let source_id = 0;
     let sink_id = graph.node_count() - 1;
-    let initial_feasible_flow = max_flow(source_id, sink_id, g);
 
-    graph.clone().edge_references().for_each(|x| {
-        graph
-            .edge_weight_mut(x.id())
-            .unwrap()
-            .update_flow(initial_feasible_flow[x.source().index() * N + x.target().index()]);
-    });
+    graph = max_flow(source_id, sink_id, graph);
+    debug_println!("_test = {:?}", Dot::new(&graph));
 
-    debug_println!("{:?}", Dot::new(&graph));
-    
     //removing orphan nodes from the graph
-    find_orphan_nodes(graph.clone(), initial_feasible_flow.clone(), N)
-        .iter()
-        .for_each(|&x| {
-            graph.remove_node(x).unwrap();
-        });
+    find_orphan_nodes(&mut graph).iter().for_each(|&x| {
+        debug_println!("find_orphan nodes : {:?}", x);
+        graph.remove_node(x).unwrap();
+    });
 
     debug_println!("{:?}", Dot::new(&graph));
 
@@ -120,16 +84,10 @@ fn initialization<'a, NUM, Ix>(
         .map(|x| (x.source().index() as u32, x.target().index() as u32))
         .collect();
 
-    debug_println!("initial_feasible_flow = {:?}", initial_feasible_flow);
-
-    debug_println!("T ={:?}", T);
-    debug_println!("L = {:?}", L);
-    debug_println!("U = {:?}", U);
-
     //while T isnt a tree : we adding one edge from U to T
     //we cant obtain cycle at iteration n since we necesseraly
     //have a spanning tree the iteration n-1
-    while !is_tree(T.clone(), graph.node_count()) {
+    while !is_tree(&mut T, graph.node_count()) {
         T.push(U.pop().unwrap());
     }
 
@@ -143,33 +101,30 @@ fn initialization<'a, NUM, Ix>(
 }
 
 //checking tree using number of edge property in spanning tree
-fn is_tree<E>(edges: Vec<E>, n: usize) -> bool {
+fn is_tree<E>(edges: &mut Vec<E>, n: usize) -> bool {
     edges.len() + 1 == n
 }
 
 //iterate over nodes and checking : sum(flow in adjacent edges) > 0
-fn find_orphan_nodes<N, E>(
-    graph: DiGraph<N, E>,
-    flow: Vec<i32>,
-    n: usize,
+fn find_orphan_nodes<N>(
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
 ) -> Vec<petgraph::graph::NodeIndex> {
     graph
         .node_indices()
-        .skip(1)
         .rev()
         .skip(1)
         .filter(|&u| {
-            graph.neighbors(u).fold(true, |check, v| {
-                check && flow[u.index() * n + v.index()] == 0
-            })
+            graph
+                .edges(u)
+                .fold(true, |check, edge| check && edge.weight().flow == 0)
         })
         .collect()
 }
 
 //TODO refactor this abomination (it work)
 fn compute_node_potential<'a, N>(
-    graph: DiGraph<N, CustomEdgeIndices<i32>>,
-    sptree: SPTree,
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
+    sptree: &mut SPTree,
 ) -> Vec<i32> {
     let mut pi: Vec<i32> = vec![-INF; graph.node_count()]; //vector of node potential
     pi[0] = 0; // init of root potential
@@ -223,9 +178,9 @@ fn compute_node_potential<'a, N>(
 //detecting the single edge cost put to 1 that divide T1 and T2 in T
 fn update_potential(
     potential: Vec<i32>,
-    sptree: SPTree,
+    sptree: &mut SPTree,
     leaving_arc: (u32, u32),
-    reduced_cost: HashMap<(i32, i32), i32>,
+    reduced_cost: &mut HashMap<(i32, i32), i32>,
 ) -> Vec<i32> {
     let mut edges: Vec<(u32, u32, f32)> = sptree
         .t
@@ -234,7 +189,7 @@ fn update_potential(
         .map(|x| (x.0, x.1, 0.))
         .collect();
     edges.push((leaving_arc.0, leaving_arc.1, 1.)); // <-- edge separating T1 and T2
-    let g = Graph::<(), f32, Directed>::from_edges(edges.clone());
+    let g = Graph::<(), f32, Directed>::from_edges(edges);
     let path_cost = bellman_ford(&g, NodeIndex::new(0)).unwrap().distances;
     let potentials_to_update: Vec<usize> = path_cost
         .iter()
@@ -268,9 +223,9 @@ fn update_potential(
 //Compute reduced cost such that : for any edge (i, j) in T : C^pi_ij = C_ij - pi(i) + pi(j) = 0
 //                                 for any edge (i, j) notin T : C^pi_ij = C_ij - pi(i) + pi(j)
 fn compute_reduced_cost<N>(
-    pi: Vec<i32>,
-    graph: DiGraph<N, CustomEdgeIndices<i32>>,
-    sptree: SPTree,
+    pi: &mut Vec<i32>,
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
+    sptree: &mut SPTree,
 ) -> HashMap<(i32, i32), i32> {
     let mut reduced_cost: HashMap<(i32, i32), i32> = HashMap::new();
     sptree.l.iter().for_each(|&(u, v)| {
@@ -311,7 +266,7 @@ fn compute_reduced_cost<N>(
 
 //Working but not sure about the way it is... (it work)
 //probably better way to manage type Option<(_,_)>
-fn find_entering_arc(sptree: SPTree, reduced_cost: HashMap<(i32, i32), i32>) -> Option<(u32, u32)> {
+fn find_entering_arc(sptree: &mut SPTree, reduced_cost: &mut HashMap<(i32, i32), i32>) -> Option<(u32, u32)> {
     let min_l = sptree.l.iter().min_by(|a, b| {
         reduced_cost
             .get(&(a.0 as i32, a.1 as i32))
@@ -354,10 +309,10 @@ fn find_entering_arc(sptree: SPTree, reduced_cost: HashMap<(i32, i32), i32>) -> 
     }
 }
 
-//finding cycle using Bellmanford algorithm to find negative weight cycle
+//Using Bellmanford algorithm to find negative weight cycle
 //we build a graph with a cycle and forcing every arc weight to 0 except for one arc that we know
 //in the cycle. BF then find negative weight cycle
-fn find_cycle(sptree: SPTree, entering_arc: (u32, u32)) -> Vec<u32> {
+fn find_cycle(sptree: &mut SPTree, entering_arc: (u32, u32)) -> Vec<u32> {
     let is_in_u = sptree.u.iter().contains(&entering_arc);
     let mut edges: Vec<(u32, u32, f32)> = sptree.t.iter().map(|&x| (x.0, x.1, 0.)).collect();
     let mut edges1: Vec<(u32, u32, f32)> = sptree.t.iter().map(|&x| (x.1, x.0, 0.)).collect();
@@ -378,8 +333,8 @@ fn find_cycle(sptree: SPTree, entering_arc: (u32, u32)) -> Vec<u32> {
 }
 
 //checking if the specified edge is in forward direction according to a cycle
-//needed in function compute_flowchange(...)  
-fn is_forward(edgeref: EdgeReference<CustomEdgeIndices<i32>>, cycle: Vec<u32>) -> bool {
+//needed in function compute_flowchange(...)
+fn is_forward(edgeref: EdgeReference<CustomEdgeIndices<i32>>, cycle:&mut Vec<u32>) -> bool {
     let (i, j) = (edgeref.source().index(), edgeref.target().index());
     let mut altered_cycle = cycle.clone();
     altered_cycle.push(*cycle.first().unwrap());
@@ -391,7 +346,7 @@ fn is_forward(edgeref: EdgeReference<CustomEdgeIndices<i32>>, cycle: Vec<u32>) -
 }
 
 //decompose cycle in tuple_altered_cycle variable and count distance using index in vector
-fn distance_in_cycle(edgeref: EdgeReference<CustomEdgeIndices<i32>>, cycle: Vec<u32>) -> usize {
+fn distance_in_cycle(edgeref: EdgeReference<CustomEdgeIndices<i32>>, cycle:&mut Vec<u32>) -> usize {
     let (i, j) = (edgeref.source().index(), edgeref.target().index());
     let mut altered_cycle = cycle.clone();
     altered_cycle.push(*cycle.first().unwrap());
@@ -409,8 +364,8 @@ fn distance_in_cycle(edgeref: EdgeReference<CustomEdgeIndices<i32>>, cycle: Vec<
 
 //computing delta the amount of unit of flow we can augment through the cycle
 fn compute_flowchange<N>(
-    graph: DiGraph<N, CustomEdgeIndices<i32>>,
-    cycle: Vec<u32>,
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
+    mut cycle: &mut Vec<u32>,
 ) -> ((u32, u32), Vec<((u32, u32), i32)>) {
     let mut altered_cycle = cycle.clone();
     altered_cycle.push(*cycle.first().unwrap());
@@ -432,14 +387,14 @@ fn compute_flowchange<N>(
     //debug_println!("edge_in_cycle before reorder = {:?}", edge_in_cycle);
     edge_in_cycle = edge_in_cycle
         .into_iter()
-        .sorted_by_key(|&x| distance_in_cycle(x, cycle.clone()))
+        .sorted_by_key(|&x| distance_in_cycle(x, &mut cycle))
         .rev()
         .collect();
     //debug_println!("edge_in_cycle after reorder = {:?}", edge_in_cycle);
     let delta: Vec<i32> = edge_in_cycle
         .iter()
         .map(|&x| {
-            if is_forward(x, cycle.clone()) {
+            if is_forward(x, &mut cycle) {
                 debug_println!(
                     "edge {:?} is forward, delta_ij ={:?}",
                     x,
@@ -462,7 +417,7 @@ fn compute_flowchange<N>(
         .map(|&x| {
             (
                 (x.source().index() as u32, x.target().index() as u32),
-                if is_forward(x, cycle.clone()) {
+                if is_forward(x, &mut cycle) {
                     *flowchange.1
                 } else {
                     -*flowchange.1
@@ -481,7 +436,7 @@ fn compute_flowchange<N>(
 
 //updating the flow in every edge specified in flow_graph variable
 fn update_flow<N>(
-    graph: DiGraph<N, CustomEdgeIndices<i32>>,
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
     flow_change: Vec<((u32, u32), i32)>,
 ) -> DiGraph<N, CustomEdgeIndices<i32>>
 where
@@ -504,9 +459,9 @@ where
 //updating sptree structure according to the leaving arc
 //removing it from T and putting in L or U depending on the updated flow on the arc
 fn update_sptree_with_leaving<N>(
-    sptree: SPTree,
+    sptree: &mut SPTree,
     leaving_arc: (u32, u32),
-    graph: DiGraph<N, CustomEdgeIndices<i32>>,
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
 ) -> SPTree {
     let mut updated_sptree = sptree.clone();
     updated_sptree.t = updated_sptree
@@ -535,7 +490,7 @@ fn update_sptree_with_leaving<N>(
 }
 
 //adding entering_arc to T arc set of sptree
-fn update_sptree_with_entering(sptree: SPTree, entering_arc: Option<(u32, u32)>) -> SPTree {
+fn update_sptree_with_entering(sptree: &mut SPTree, entering_arc: Option<(u32, u32)>) -> SPTree {
     let mut updated_sptree = sptree.clone();
     updated_sptree.t.push(entering_arc.unwrap());
 
@@ -549,7 +504,6 @@ fn update_sptree_with_entering(sptree: SPTree, entering_arc: Option<(u32, u32)>)
         .into_iter()
         .filter(|&x| x != entering_arc.unwrap())
         .collect();
-
     updated_sptree
 }
 
@@ -559,83 +513,218 @@ fn update_sptree_with_entering(sptree: SPTree, entering_arc: Option<(u32, u32)>)
 
 //structure for Push-Relabel algorithm
 //TODO : function over generics integer
+//
+/*
 struct PRstruct {
-    capacity: Vec<i32>, //2d vec flatten
-    flow: Vec<i32>,     //2d vec flatten
-    label: Vec<i32>,
-    excess: Vec<i32>,
-    excess_vertices: Vec<usize>,
-    seen: Vec<usize>,
-    n: usize,
+capacity: Vec<i32>, //2d vec flatten
+flow: Vec<i32>,     //2d vec flatten
+label: Vec<i32>,
+excess: Vec<i32>,
+excess_vertices: Vec<usize>,
+seen: Vec<usize>,
+n: usize,
 }
 
 fn push(u: usize, v: usize, mut g: PRstruct) -> PRstruct {
-    let d = std::cmp::min(g.excess[u], g.capacity[g.n * u + v] - g.flow[g.n * u + v]);
-    g.flow[g.n * u + v] += d;
-    g.flow[g.n * v + u] -= d;
-    g.excess[u] -= d;
-    g.excess[v] += d;
-    if d != 0 && g.excess[v] == d {
-        g.excess_vertices.push(v);
-    }
-    g
+let d = std::cmp::min(g.excess[u], g.capacity[g.n * u + v] - g.flow[g.n * u + v]);
+g.flow[g.n * u + v] += d;
+g.flow[g.n * v + u] -= d;
+g.excess[u] -= d;
+g.excess[v] += d;
+if d != 0 && g.excess[v] == d {
+    g.excess_vertices.push(v);
+}
+g
 }
 
 fn relabel(u: usize, mut g: PRstruct) -> PRstruct {
-    let mut d = INF;
-    for i in 0..g.n {
-        if (g.capacity[g.n * u + i] - g.flow[g.n * u + i]) > 0 {
-            d = std::cmp::min(d, g.label[i]);
-        }
+let mut d = INF;
+for i in 0..g.n {
+    if (g.capacity[g.n * u + i] - g.flow[g.n * u + i]) > 0 {
+        d = std::cmp::min(d, g.label[i]);
     }
-    if d < INF {
-        g.label[u] = d + 1;
-    }
-    g
+}
+if d < INF {
+    g.label[u] = d + 1;
+}
+g
 }
 
 fn discharge(u: usize, mut g: PRstruct) -> PRstruct {
-    while g.excess[u] > 0 {
-        if g.seen[u] < g.n {
-            let v = g.seen[u];
-            if (g.capacity[g.n * u + v] - g.flow[g.n * u + v]) > 0 && g.label[u] > g.label[v] {
-                g = push(u, v, g);
-            } else {
-                g.seen[u] += 1;
-            }
+while g.excess[u] > 0 {
+    //
+    if g.seen[u] < g.n {
+        let v = g.seen[u];
+        //println!("v = {:?}", v);
+        if (g.capacity[g.n * u + v] - g.flow[g.n * u + v]) > 0 && g.label[u] > g.label[v] {
+            g = push(u, v, g);
         } else {
-            g = relabel(u, g);
-            g.seen[u] = 0;
+            g.seen[u] += 1;
         }
+    } else {
+        g = relabel(u, g);
+        g.seen[u] = 0;
     }
-    g
+}
+g
 }
 
 fn max_flow(s: usize, t: usize, mut g: PRstruct) -> Vec<i32> {
-    g.label = vec![0; g.n];
-    g.label[s] = g.n as i32;
-    g.flow = vec![0; g.n * g.n];
-    g.excess = vec![0; g.n];
-    g.excess[s] = INF;
-    for i in 0..g.n {
-        if i != s {
-            g = push(s, i, g);
-        }
+g.label = vec![0; g.n];
+g.label[s] = g.n as i32;
+g.flow = vec![0; g.n * g.n];
+g.excess = vec![0; g.n];
+g.excess[s] = INF;
+for i in 0..g.n {
+    if i != s {
+        g = push(s, i, g);
     }
-    g.seen = vec![0; g.n];
+}
+g.seen = vec![0; g.n];
 
-    while !g.excess_vertices.is_empty() {
-        let u = g.excess_vertices.pop();
-        if u.unwrap() != s && u.unwrap() != t {
-            g = discharge(u.unwrap(), g);
+while !g.excess_vertices.is_empty() {
+    println!("g.excess_vertices = {:?}", g.excess_vertices);
+    let u = g.excess_vertices.pop();
+    if u.unwrap() != s && u.unwrap() != t {
+        g = discharge(u.unwrap(), g);
+    }
+}
+let mut maxflow = 0;
+for i in 0..g.n {
+    maxflow += g.flow[i * g.n + t];
+}
+g.flow.iter().map(|&x| if x < 0 { 0 } else { x }).collect()
+}*/
+
+fn push<N>(
+    edgeref: &mut EdgeReference<CustomEdgeIndices<i32>>,
+    graph: &mut DiGraph<N, CustomEdgeIndices<i32>>,
+    excess: &mut Vec<i32>,
+    excess_vertices: &mut Vec<usize>,
+) {
+    let d = std::cmp::min(
+        excess[edgeref.source().index()],
+        graph.edge_weight(edgeref.id()).unwrap().capacity
+            - graph.edge_weight(edgeref.id()).unwrap().flow,
+    );
+    graph.edge_weight_mut(edgeref.id()).unwrap().flow += d;
+    graph
+        .edge_weight_mut(graph.find_edge(edgeref.target(), edgeref.source()).unwrap())
+        .unwrap()
+        .flow -= d;
+    excess[edgeref.source().index()] -= d;
+    excess[edgeref.target().index()] += d;
+    if d != 0 && excess[edgeref.target().index()] == d {
+        excess_vertices.push(edgeref.target().index());
+    }
+}
+fn relabel<N>(u: usize, graph: &mut DiGraph<N, CustomEdgeIndices<i32>>, label: &mut Vec<i32>) {
+    let mut d = INF;
+    graph
+        .edges_directed(NodeIndex::new(u), Outgoing)
+        .for_each(|x| {
+            if (x.weight().capacity - x.weight().flow) > 0 {
+                d = std::cmp::min(d, label[x.target().index()]);
+            };
+        });
+    graph
+        .edges_directed(NodeIndex::new(u), Incoming)
+        .for_each(|x| {
+            if (x.weight().capacity - x.weight().flow) > 0 {
+                d = std::cmp::min(d, label[x.target().index()]);
+            };
+        });
+    if d < INF {
+        label[u] = d + 1;
+    }
+}
+fn discharge(
+    u: usize,
+    graph: &mut DiGraph<u32, CustomEdgeIndices<i32>>,
+    excess: &mut Vec<i32>,
+    excess_vertices: &mut Vec<usize>,
+    seen: &mut Vec<usize>,
+    label: &mut Vec<i32>,
+) {
+    //Maybe not necessary to clone here 
+    let temp_graph = graph.clone();
+    while excess[u] > 0 {
+        if seen[u] < graph.node_count() {
+            let v = seen[u];
+            let edge_uv = graph.find_edge(NodeIndex::new(u), NodeIndex::new(v));
+            if edge_uv != None
+                && (graph.edge_weight(edge_uv.unwrap()).unwrap().capacity
+                    - graph.edge_weight(edge_uv.unwrap()).unwrap().flow)
+                    > 0
+                && label[u] > label[v]
+            {
+                let mut edgeref = temp_graph
+                    .edge_references()
+                    .find(|x| x.source().index() == u && x.target().index() == v)
+                    .unwrap();
+                push(&mut edgeref, graph, excess, excess_vertices);
+            } else {
+                seen[u] += 1;
+            }
+        } else {
+            relabel(u, graph, label);
+            seen[u] = 0;
         }
     }
-    let mut maxflow = 0;
-    for i in 0..g.n {
-        maxflow += g.flow[i * g.n + t];
+}
+
+fn max_flow(
+    s: usize,
+    t: usize,
+    graph: DiGraph<u32, CustomEdgeIndices<i32>>,
+) -> DiGraph<u32, CustomEdgeIndices<i32>> {
+    let mut label = vec![0i32; graph.node_count()];
+    label[s] = graph.node_count() as i32;
+    let mut excess = vec![0; graph.node_count()];
+    excess[s] = INF;
+    let mut seen = vec![0; graph.node_count()];
+    let mut excess_vertices: Vec<usize> = vec![];
+    let mut max_flow_graph = graph.clone();
+    graph.edge_references().for_each(|x| {
+        max_flow_graph.add_edge(
+            x.target(),
+            x.source(),
+            CustomEdgeIndices {
+                cost: (0),
+                capacity: (0),
+                flow: (0),
+            },
+        );
+    });
+
+    graph
+        .edges_directed(NodeIndex::new(s), Outgoing)
+        .for_each(|mut x| push(&mut x, &mut max_flow_graph, &mut excess, &mut excess_vertices));
+
+    while !excess_vertices.is_empty() {
+        let u = excess_vertices.pop();
+        if u.unwrap() != s && u.unwrap() != t {
+            discharge(
+                u.unwrap(),
+                &mut max_flow_graph,
+                &mut excess,
+                &mut excess_vertices,
+                &mut seen,
+                &mut label,
+            );
+        }
     }
-    debug_println!(" MAX FLOW : {:?}", maxflow);
-    g.flow.iter().map(|&x| if x < 0 { 0 } else { x }).collect()
+    let mut max_flow = 0;
+    max_flow_graph.clone().edge_references().rev().for_each(|x| {
+        if graph.find_edge(x.source(), x.target()) == None {
+            max_flow_graph.remove_edge(x.id());
+        }
+    });
+    max_flow_graph
+        .edges(NodeIndex::new(0))
+        .for_each(|x| max_flow += x.weight().flow);
+    debug_println!("MAX_FLOW = {:?}", max_flow);
+    max_flow_graph
 }
 
 //main algorithm function
@@ -643,16 +732,17 @@ pub fn min_cost(
     graph: DiGraph<u32, CustomEdgeIndices<i32>>,
 ) -> DiGraph<u32, CustomEdgeIndices<i32>> {
     debug_println!("##################################### INITIALIZATION #####################################");
-    let (mut tlu_solution, mut new_graph) = initialization::<i32, DefaultIx>(graph.clone());
 
-    let mut potentials = compute_node_potential(new_graph.clone(), tlu_solution.clone());
+    let (mut tlu_solution, mut min_cost_flow_graph) = initialization::<i32, DefaultIx>(graph.clone());
+
+    let mut potentials = compute_node_potential(&mut min_cost_flow_graph, &mut tlu_solution);
     debug_println!("potentials = {:?}", potentials);
     let mut reduced_cost =
-        compute_reduced_cost(potentials.clone(), new_graph.clone(), tlu_solution.clone());
+        compute_reduced_cost(&mut potentials,&mut min_cost_flow_graph, &mut tlu_solution);
     debug_println!("tlu_solution = {:?}", tlu_solution);
     debug_println!("reduced_cost = {:?}", reduced_cost);
 
-    let mut entering_arc = find_entering_arc(tlu_solution.clone(), reduced_cost.clone());
+    let mut entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
     debug_println!("entering arc = {:?}", entering_arc);
 
     let mut iteration = 1;
@@ -661,41 +751,40 @@ pub fn min_cost(
     while entering_arc != None && iteration < max_iteration {
         debug_println!("##################################### ITERATION {:?} #####################################", iteration);
 
-        let cycle = find_cycle(tlu_solution.clone(), entering_arc.unwrap());
+        let mut cycle = find_cycle(&mut tlu_solution, entering_arc.unwrap());
         debug_println!("tlu_solution = {:?}", tlu_solution);
         debug_println!("entering arc = {:?}", entering_arc.unwrap());
         debug_println!("cycle found = {:?}", cycle);
 
-        tlu_solution = update_sptree_with_entering(tlu_solution.clone(), entering_arc);
+        tlu_solution = update_sptree_with_entering(&mut tlu_solution, entering_arc);
 
-        let (leaving_arc, vec_flow_change) = compute_flowchange(new_graph.clone(), cycle);
+        let (leaving_arc, vec_flow_change) = compute_flowchange(&mut min_cost_flow_graph, &mut cycle);
 
         tlu_solution =
-            update_sptree_with_leaving(tlu_solution.clone(), leaving_arc, new_graph.clone());
+            update_sptree_with_leaving(&mut tlu_solution, leaving_arc, &mut min_cost_flow_graph);
 
-        new_graph = update_flow(new_graph.clone(), vec_flow_change);
-        debug_println!("{:?}", Dot::new(&new_graph));
+        min_cost_flow_graph = update_flow(&mut min_cost_flow_graph, vec_flow_change);
+        debug_println!("{:?}", Dot::new(&min_cost_flow_graph));
 
         potentials = update_potential(
-            potentials.clone(),
-            tlu_solution.clone(),
+            potentials,
+            &mut tlu_solution,
             entering_arc.unwrap(),
-            reduced_cost.clone(),
+            &mut reduced_cost,
         );
-        //potentials = compute_node_potential(new_graph.clone(), tlu_solution.clone());
         debug_println!("potentials = {:?}", potentials);
 
         reduced_cost =
-            compute_reduced_cost(potentials.clone(), new_graph.clone(), tlu_solution.clone());
+            compute_reduced_cost(&mut potentials, &mut min_cost_flow_graph, &mut tlu_solution);
         debug_println!("tlu_solution = {:?}", tlu_solution);
         debug_println!("reduced_cost = {:?}", reduced_cost);
 
-        entering_arc = find_entering_arc(tlu_solution.clone(), reduced_cost.clone());
+        entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
         debug_println!("entering arc = {:?}", entering_arc);
         iteration += 1;
     }
     if iteration == max_iteration {
         debug_println!("MAX iteration reached");
     }
-    new_graph
+    min_cost_flow_graph
 }
