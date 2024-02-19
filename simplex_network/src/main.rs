@@ -12,7 +12,6 @@ fn main() {
     let n4 = graph.add_node(4);
     let t = graph.add_node(5);
 
-    
     graph.add_edge(
         n1,
         n2,

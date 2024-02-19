@@ -223,11 +223,11 @@ fn _compute_node_potential<'a, N, NUM: CloneableNum>(
 //they are sorted by distance to root/depth in the tree and starting from the root we compute each
 //potential from the one of its predecessor starting with pi[0] = 0 we have :
 //
-//  pi[id] = if arc(id, pred(id)) 
-//              cost(id, pred(id)) + pi[pred(id)] 
+//  pi[id] = if arc(id, pred(id))
+//              cost(id, pred(id)) + pi[pred(id)]
 //           else if  arc(pred(id), id)
 //              pi[pred(id)] - cost(pred(id), id)
-//              
+//
 fn compute_node_potential<N, NUM: CloneableNum>(
     graph: &mut DiGraph<N, CustomEdgeIndices<NUM>>,
     sptree: &mut SPTree,
