@@ -12,45 +12,14 @@ fn main() {
     let n3 = graph.add_node(3);
     let n4 = graph.add_node(4);
     let t = graph.add_node(5);
-    let N = graph.node_count();
-    let u = Vec::from([
-        0i32, 0, 7, 6, 0, 0, 0, 0, 3, 0, 2, 0, 0, 0, 0, 0, 0, 4, 0, 0, 6, 0, 2, 0, 0, 0, 0, 0, 0,
-        8, 0, 0, 0, 0, 0, 0,
-    ]);
 
-    graph.add_edge(
-        s,
-        n1,
-        CustomEdgeIndices {
-            cost: (1),
-            capacity: (u[s.index() * N + n1.index()]),
-            flow: (0),
-        },
-    );
-    graph.add_edge(
-        s,
-        n2,
-        CustomEdgeIndices {
-            cost: (1),
-            capacity: (u[s.index() * N + n2.index()]),
-            flow: (0),
-        },
-    );
-    graph.add_edge(
-        s,
-        n3,
-        CustomEdgeIndices {
-            cost: (1),
-            capacity: (u[s.index() * N + n3.index()]),
-            flow: (0),
-        },
-    );
+    
     graph.add_edge(
         n1,
         n2,
         CustomEdgeIndices {
             cost: (1),
-            capacity: (u[n1.index() * N + n2.index()]),
+            capacity: (3),
             flow: (0),
         },
     );
@@ -59,7 +28,7 @@ fn main() {
         n4,
         CustomEdgeIndices {
             cost: (1),
-            capacity: (u[n1.index() * N + n4.index()]),
+            capacity: (2),
             flow: (0),
         },
     );
@@ -68,7 +37,7 @@ fn main() {
         n2,
         CustomEdgeIndices {
             cost: (1),
-            capacity: (u[n3.index() * N + n2.index()]),
+            capacity: (6),
             flow: (0),
         },
     );
@@ -77,7 +46,7 @@ fn main() {
         n4,
         CustomEdgeIndices {
             cost: (1),
-            capacity: (u[n3.index() * N + n4.index()]),
+            capacity: (2),
             flow: (0),
         },
     );
@@ -86,7 +55,7 @@ fn main() {
         t,
         CustomEdgeIndices {
             cost: (1),
-            capacity: (u[n2.index() * N + t.index()]),
+            capacity: (4),
             flow: (0),
         },
     );
@@ -95,11 +64,37 @@ fn main() {
         t,
         CustomEdgeIndices {
             cost: (1),
-            capacity: (u[n4.index() * N + t.index()]),
+            capacity: (8),
             flow: (0),
         },
     );
-
+    graph.add_edge(
+        s,
+        n1,
+        CustomEdgeIndices {
+            cost: (1),
+            capacity: (0),
+            flow: (0),
+        },
+    );
+    graph.add_edge(
+        s,
+        n2,
+        CustomEdgeIndices {
+            cost: (1),
+            capacity: (7),
+            flow: (0),
+        },
+    );
+    graph.add_edge(
+        s,
+        n3,
+        CustomEdgeIndices {
+            cost: (1),
+            capacity: (6),
+            flow: (0),
+        },
+    );
     println!("{:?}", Dot::new(&graph));
     let min_cost_flow = min_cost(graph);
     println!("{:?}", Dot::new(&min_cost_flow));

@@ -41,19 +41,19 @@ int main() {
 
   ListDigraph::ArcMap<int> capamap(g);
   capamap.set(a01, 0);
-  capamap.set(a02, 7);
-  capamap.set(a03, 6);
-  capamap.set(a12, 3);
-  capamap.set(a14, 2);
+  capamap.set(a02, 8);
+  capamap.set(a03, 9);
+  capamap.set(a12, 2);
+  capamap.set(a14, 6);
   capamap.set(a32, 6);
-  capamap.set(a34, 2);
-  capamap.set(a25, 4);
-  capamap.set(a45, 8);
+  capamap.set(a34, 5);
+  capamap.set(a25, 12);
+  capamap.set(a45, 10);
 
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n5, 5);
+  ns.stSupply(n0, n5, 17);
 
   ListDigraph::ArcMap<int> res(g);
   ns.run();
