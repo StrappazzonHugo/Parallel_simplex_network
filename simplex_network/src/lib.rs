@@ -98,7 +98,7 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
         .map(|x| (x.source().index() as u32, x.target().index() as u32))
         .collect();
 
-    let mut U: Vec<(u32, u32)> = up_bound_restricted
+    let U: Vec<(u32, u32)> = up_bound_restricted
         .map(|x| (x.source().index() as u32, x.target().index() as u32))
         .collect();
 
@@ -117,9 +117,9 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
     //                           if no :
     //      continue
 
-    //while T isnt a tree : we adding one edge from U to T
-    //we cant obtain cycle at iteration n since we necesseraly
-    //have a spanning tree the iteration n-1
+    // while T isnt a tree : we add one edge from U to T
+    // we cannot obtain a cycle at iteration n since we necessarily
+    // have a spanning tree at the iteration n-1
     while !is_tree(&mut T, graph.node_count()) {
         for edge in U.iter().chain(L.iter()) {
             if !is_cyclic(&mut T, *edge) {

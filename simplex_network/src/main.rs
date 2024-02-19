@@ -1,6 +1,5 @@
-mod lib;
-use lib::min_cost;
-use lib::CustomEdgeIndices;
+use main::min_cost;
+use main::CustomEdgeIndices;
 use petgraph::dot::Dot;
 use petgraph::graph::*;
 
