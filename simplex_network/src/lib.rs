@@ -1,8 +1,10 @@
+use debug_print::debug_print;
 use debug_print::debug_println;
 use itertools::Itertools;
 use num_traits::bounds::Bounded;
 use num_traits::identities::zero;
 use num_traits::Num;
+use num_traits::Zero;
 // not used yet
 use petgraph::algo::bellman_ford;
 use petgraph::algo::find_negative_cycle;
@@ -64,65 +66,77 @@ fn type_of<T>(_: T) -> &'static str {
 
 fn initialization<'a, NUM: CloneableNum, Ix>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
+    demand: NUM,
 ) -> (SPTree, DiGraph<u32, CustomEdgeIndices<NUM>>) {
     let source_id = 0;
-    let sink_id = graph.node_count() - 1;
-
-    graph = max_flow(source_id, sink_id, graph);
+    let mut sink_id = graph
+        .node_indices()
+        .find(|&x| (graph.node_weight(x).unwrap() == &99u32))
+        .unwrap();
+    let mut _max_demand: NUM = zero();
+    (graph, _max_demand) = max_flow(source_id, sink_id.index(), graph);
     debug_println!("_test = {:?}", Dot::new(&graph));
 
+    debug_println!("sink id = {:?}", sink_id);
     //removing orphan nodes from the graph
     find_orphan_nodes(&mut graph).iter().for_each(|&x| {
         debug_println!("find_orphan nodes : {:?}", x);
         graph.remove_node(x).unwrap();
     });
 
+    sink_id = graph
+        .node_indices()
+        .find(|&x| (graph.node_weight(x).unwrap() == &99u32))
+        .unwrap();
+    debug_println!("sink id = {:?}", sink_id);
+
     debug_println!("{:?}", Dot::new(&graph));
 
     //Filling T arc-set with free arc of the initial feasible solution
     //L with restricted at lowerbound arcs
     //u with restricted at upperbound arcs
-    let freearcs = graph
-        .edge_references()
-        .filter(|&x| x.weight().flow > zero() && x.weight().flow < x.weight().capacity);
 
-    let up_bound_restricted = graph
-        .edge_references()
-        .filter(|&x| x.weight().flow == x.weight().capacity && x.weight().capacity > zero());
+    assert!(demand <= _max_demand);
+    resize_flow(&mut graph, demand, _max_demand, sink_id);
 
-    let low_bound_restricted = graph
-        .edge_references()
-        .filter(|&x| x.weight().flow == zero() && x.weight().capacity > zero());
+    let mut T: Vec<(u32, u32)> = Vec::new();
+    let mut L: Vec<(u32, u32)> = Vec::new();
+    let mut U: Vec<(u32, u32)> = Vec::new();
 
-    let mut T: Vec<(u32, u32)> = freearcs
-        .map(|x| (x.source().index() as u32, x.target().index() as u32))
-        .collect();
-
-    let U: Vec<(u32, u32)> = up_bound_restricted
-        .map(|x| (x.source().index() as u32, x.target().index() as u32))
-        .collect();
-
-    let L: Vec<(u32, u32)> = low_bound_restricted
-        .map(|x| (x.source().index() as u32, x.target().index() as u32))
-        .collect();
+    init_tlu(&mut graph, &mut T, &mut L, &mut U);
 
     debug_println!("T = {:?}", T);
     debug_println!("L = {:?}", L);
     debug_println!("U = {:?}", U);
 
-    //TODO
-    //check is there a cycle i T if yes :
-    //      push along the cycle until one or more arc become restricted arcs
-    //      recompute T
-    //                           if no :
-    //      continue
+    debug_println!("is cyclic {:?}", is_cyclic(&mut T));
+
+    //TODO find a way to remove duplicate code
+    if is_cyclic(&mut T) {
+        let arc = T.pop().unwrap();
+        let mut cycle = find_cycle(
+            &mut SPTree {
+                t: T.clone(),
+                l: L.clone(),
+                u: U.clone(),
+            },
+            arc,
+        );
+        let (_useless, vec_flow_change) = compute_flowchange(&mut graph, &mut cycle);
+        graph = update_flow(&mut graph, vec_flow_change);
+
+        init_tlu(&mut graph, &mut T, &mut L, &mut U);
+    }
+    debug_println!("is cyclic {:?}", is_cyclic(&mut T));
+    debug_println!("{:?}", Dot::new(&graph));
 
     // while T isnt a tree : we add one edge from U to T
     // we cannot obtain a cycle at iteration n since we necessarily
     // have a spanning tree at the iteration n-1
     while !is_tree(&mut T, graph.node_count()) {
+        //debug_print!("test");
         for edge in U.iter().chain(L.iter()) {
-            if !is_cyclic(&mut T, *edge) {
+            if !is_cyclic_with_arc(&mut T, *edge) {
                 T.push(*edge);
                 break;
             }
@@ -138,17 +152,52 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
     (tlu_solution, graph)
 }
 
+fn init_tlu<N, NUM: CloneableNum>(
+    graph: &mut DiGraph<N, CustomEdgeIndices<NUM>>,
+    T: &mut Vec<(u32, u32)>,
+    L: &mut Vec<(u32, u32)>,
+    U: &mut Vec<(u32, u32)>,
+) {
+    let freearcs = graph
+        .edge_references()
+        .filter(|&x| x.weight().flow > zero() && x.weight().flow < x.weight().capacity);
+
+    let up_bound_restricted = graph
+        .edge_references()
+        .filter(|&x| x.weight().flow == x.weight().capacity && x.weight().capacity > zero());
+
+    let low_bound_restricted = graph
+        .edge_references()
+        .filter(|&x| x.weight().flow == zero() && x.weight().capacity > zero());
+
+    *T = freearcs
+        .map(|x| (x.source().index() as u32, x.target().index() as u32))
+        .collect();
+
+    *U = up_bound_restricted
+        .map(|x| (x.source().index() as u32, x.target().index() as u32))
+        .collect();
+
+    *L = low_bound_restricted
+        .map(|x| (x.source().index() as u32, x.target().index() as u32))
+        .collect();
+}
+
 //checking tree using number of edge property in spanning tree
 fn is_tree<E>(edges: &mut Vec<E>, n: usize) -> bool {
     edges.len() + 1 == n
 }
 
-fn is_cyclic(t: &mut Vec<(u32, u32)>, arc: (u32, u32)) -> bool {
+fn is_cyclic_with_arc(t: &mut Vec<(u32, u32)>, arc: (u32, u32)) -> bool {
     let mut g = Graph::<(), (), Undirected>::from_edges(t.clone());
     g.extend_with_edges(&[arc]);
     petgraph::algo::is_cyclic_undirected(&g)
 }
 
+fn is_cyclic(t: &mut Vec<(u32, u32)>) -> bool {
+    let g = Graph::<(), (), Undirected>::from_edges(t.clone());
+    petgraph::algo::is_cyclic_undirected(&g)
+}
 //iterate over nodes and checking : sum(flow in adjacent edges) > 0
 fn find_orphan_nodes<N, NUM: CloneableNum>(
     graph: &mut DiGraph<N, CustomEdgeIndices<NUM>>,
@@ -165,7 +214,83 @@ fn find_orphan_nodes<N, NUM: CloneableNum>(
         .collect()
 }
 
-//TODO refactor this abomination (it work)
+//resize the flow such that it match the demand 
+fn resize_flow<NUM: CloneableNum>(
+    graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
+    demand: NUM,
+    max_demand: NUM,
+    sink_id: NodeIndex,
+) {
+    if demand > max_demand {
+        return; //TODO flow not feasible
+    }
+    if demand == max_demand {
+        return;
+    }
+
+    let graph_before_resize = graph.clone();
+    let mut restricted_arcs: Vec<EdgeReference<CustomEdgeIndices<NUM>>> = graph_before_resize
+        .edge_references()
+        .filter(|x| x.target() == sink_id || x.source() == sink_id)
+        .collect();
+    let free_arc: Option<(usize, EdgeReference<CustomEdgeIndices<NUM>>)> = restricted_arcs
+        .clone()
+        .into_iter()
+        .find_position(|x| x.weight().flow < x.weight().capacity);
+    if !free_arc.is_none() {
+        restricted_arcs.remove(free_arc.unwrap().0);
+    }
+    let mut sum_capacity: NUM = zero();
+    let mut bool = false;
+
+    for edge in restricted_arcs.iter() {
+        sum_capacity += edge.weight().flow;
+
+        if bool {
+            graph.edge_weight_mut(edge.id()).unwrap().capacity = zero();
+        }
+        if sum_capacity >= demand {
+            bool = true;
+            graph.edge_weight_mut(edge.id()).unwrap().capacity =
+                demand - (sum_capacity - graph.edge_weight_mut(edge.id()).unwrap().flow);
+        }
+    }
+
+    if !free_arc.is_none() {
+        if bool {
+            graph
+                .edge_weight_mut(free_arc.unwrap().1.id())
+                .unwrap()
+                .capacity = zero();
+        } else {
+            graph
+                .edge_weight_mut(free_arc.unwrap().1.id())
+                .unwrap()
+                .capacity = demand - sum_capacity;
+        }
+    }
+
+    graph
+        .clone()
+        .edge_references()
+        .for_each(|x| graph.edge_weight_mut(x.id()).unwrap().flow = zero());
+    debug_println!(
+        "TRY TO MAX_Flow to damand \n {:?}",
+        Dot::new(&(graph.clone()))
+    );
+    let (resized_flow, max_demand) = max_flow(0, sink_id.index(), graph.clone());
+
+    debug_println!("RESIZED_FLOW =  {:?}", Dot::new(&(resized_flow)));
+    resized_flow.edge_references().for_each(|x| {
+        graph.edge_weight_mut(x.id()).unwrap().flow = x.weight().flow;
+
+        graph.edge_weight_mut(x.id()).unwrap().capacity =
+            graph_before_resize.edge_weight(x.id()).unwrap().capacity;
+    });
+
+    debug_println!("max_demand = {:?}", max_demand);
+}
+
 /*
 fn _compute_node_potential<'a, N, NUM: CloneableNum>(
     graph: &mut DiGraph<N, CustomEdgeIndices<NUM>>,
@@ -786,7 +911,7 @@ fn max_flow<NUM: CloneableNum>(
     s: usize,
     t: usize,
     graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
-) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
+) -> (DiGraph<u32, CustomEdgeIndices<NUM>>, NUM) {
     let mut label = vec![0i32; graph.node_count()];
     label[s] = graph.node_count() as i32;
     let mut excess = vec![zero(); graph.node_count()];
@@ -846,17 +971,18 @@ fn max_flow<NUM: CloneableNum>(
         .edges(NodeIndex::new(0))
         .for_each(|x| max_flow = x.weight().flow + max_flow);
     debug_println!("MAX_FLOW = {:?}", max_flow);
-    max_flow_graph
+    (max_flow_graph, max_flow)
 }
 
 //main algorithm function
 pub fn min_cost<NUM: CloneableNum>(
     graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
+    demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     debug_println!("##################################### INITIALIZATION #####################################");
 
     let (mut tlu_solution, mut min_cost_flow_graph) =
-        initialization::<NUM, DefaultIx>(graph.clone());
+        initialization::<NUM, DefaultIx>(graph.clone(), demand);
 
     let mut potentials = compute_node_potential(&mut min_cost_flow_graph, &mut tlu_solution);
     debug_println!("potentials = {:?}", potentials);

@@ -32,10 +32,13 @@ int main() {
   costmap.set(a01, 1);
   costmap.set(a02, 1);
   costmap.set(a03, 1);
+
   costmap.set(a12, 1);
   costmap.set(a14, 1);
+
   costmap.set(a32, 1);
   costmap.set(a34, 1);
+
   costmap.set(a25, 1);
   costmap.set(a45, 1);
 
@@ -43,17 +46,20 @@ int main() {
   capamap.set(a01, 0);
   capamap.set(a02, 8);
   capamap.set(a03, 9);
+
   capamap.set(a12, 2);
-  capamap.set(a14, 6);
+  capamap.set(a14, 4);
+
   capamap.set(a32, 6);
   capamap.set(a34, 5);
-  capamap.set(a25, 12);
-  capamap.set(a45, 10);
+
+  capamap.set(a25, 10);
+  capamap.set(a45, 0);
 
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n5, 17);
+  ns.stSupply(n0, n5, 9);
 
   ListDigraph::ArcMap<int> res(g);
   ns.run();
