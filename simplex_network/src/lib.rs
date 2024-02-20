@@ -1,5 +1,6 @@
 use debug_print::debug_print;
 use debug_print::debug_println;
+use itertools::assert_equal;
 use itertools::Itertools;
 use num_traits::bounds::Bounded;
 use num_traits::identities::zero;
@@ -8,6 +9,7 @@ use num_traits::Zero;
 // not used yet
 use petgraph::algo::bellman_ford;
 use petgraph::algo::find_negative_cycle;
+use petgraph::algo::is_cyclic_undirected;
 use petgraph::dot::Dot;
 use petgraph::graph::node_index;
 use petgraph::graph::DefaultIx;
@@ -15,6 +17,7 @@ use petgraph::graph::EdgeReference;
 use petgraph::graph::NodeIndex;
 //use ordered_float::Float; idea to compare float
 use petgraph::prelude::*;
+use petgraph::visit::IntoEdgeReferences;
 //use std::any::type_name;
 use std::collections::HashMap;
 
@@ -78,11 +81,12 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
     debug_println!("_test = {:?}", Dot::new(&graph));
 
     debug_println!("sink id = {:?}", sink_id);
-    //removing orphan nodes from the graph
+
+    /*//removing orphan nodes from the graph
     find_orphan_nodes(&mut graph).iter().for_each(|&x| {
         debug_println!("find_orphan nodes : {:?}", x);
         graph.remove_node(x).unwrap();
-    });
+    });*/
 
     sink_id = graph
         .node_indices()
@@ -113,15 +117,12 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
 
     //TODO find a way to remove duplicate code
     if is_cyclic(&mut T) {
-        let arc = T.pop().unwrap();
-        let mut cycle = find_cycle(
-            &mut SPTree {
-                t: T.clone(),
-                l: L.clone(),
-                u: U.clone(),
-            },
-            arc,
-        );
+        //let arc = T.pop().unwrap();
+        let mut cycle = find_cycle(&mut SPTree {
+            t: T.clone(),
+            l: L.clone(),
+            u: U.clone(),
+        });
         let (_useless, vec_flow_change) = compute_flowchange(&mut graph, &mut cycle);
         graph = update_flow(&mut graph, vec_flow_change);
 
@@ -214,7 +215,7 @@ fn find_orphan_nodes<N, NUM: CloneableNum>(
         .collect()
 }
 
-//resize the flow such that it match the demand 
+//resize the flow such that it match the demand
 fn resize_flow<NUM: CloneableNum>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     demand: NUM,
@@ -262,6 +263,10 @@ fn resize_flow<NUM: CloneableNum>(
                 .edge_weight_mut(free_arc.unwrap().1.id())
                 .unwrap()
                 .capacity = zero();
+            debug_println!(
+                "free_arc = {:?}",
+                graph.edge_weight(free_arc.unwrap().1.id()).unwrap()
+            );
         } else {
             graph
                 .edge_weight_mut(free_arc.unwrap().1.id())
@@ -532,7 +537,7 @@ fn find_entering_arc<NUM: CloneableNum>(
 //Using Bellmanford algorithm to find negative weight cycle
 //we build a graph with a cycle and forcing every arc weight to 0 except for one arc that we know
 //in the cycle. BF then find negative weight cycle
-fn find_cycle(sptree: &mut SPTree, entering_arc: (u32, u32)) -> Vec<u32> {
+fn find_cycle_with_arc(sptree: &mut SPTree, entering_arc: (u32, u32)) -> Vec<u32> {
     let is_in_u = sptree.u.iter().contains(&entering_arc);
     let mut edges: Vec<(u32, u32, f32)> = sptree.t.iter().map(|&x| (x.0, x.1, 0.)).collect();
     let mut edges1: Vec<(u32, u32, f32)> = sptree.t.iter().map(|&x| (x.1, x.0, 0.)).collect();
@@ -544,6 +549,55 @@ fn find_cycle(sptree: &mut SPTree, entering_arc: (u32, u32)) -> Vec<u32> {
     }
     let g = Graph::<(), f32, Directed>::from_edges(edges);
     let cycle = find_negative_cycle(&g, NodeIndex::new(0));
+
+    debug_println!("entering arc = {:?}", entering_arc);
+    debug_println!("in sptre : {:?}", sptree);
+    debug_println!("cycle = {:?}", cycle);
+    let mut vec_id_cycle = Vec::new();
+    cycle
+        .unwrap()
+        .iter()
+        .for_each(|&x| vec_id_cycle.push(x.index() as u32));
+    while !((vec_id_cycle[0] ==entering_arc.0 || vec_id_cycle[0] == entering_arc.1) && 
+          (vec_id_cycle[1] ==entering_arc.0 || vec_id_cycle[1] == entering_arc.1)){
+        vec_id_cycle.rotate_left(1);
+    }
+    debug_println!("vec_id_cycle = {:?}", vec_id_cycle);
+    vec_id_cycle
+}
+
+//Using Bellmanford algorithm to find negative weight cycle
+//we build a graph with a cycle and forcing every arc weight to 0 except for one arc that we know
+//in the cycle. BF then find negative weight cycle
+fn find_cycle(sptree: &mut SPTree) -> Vec<u32> {
+    let mut edges: Vec<(u32, u32, f32)> = sptree.t.iter().map(|&x| (x.0, x.1, 0.)).collect();
+    let mut g = Graph::<(), f32, Undirected>::from_edges(edges.clone());
+    let mut edge: (usize, &(u32, u32, f32)) = (0, &(0, 0, 0.));
+    for x in edges.iter().enumerate() {
+        edge = x;
+        g.remove_edge(
+            g.find_edge(
+                NodeIndex::new(edge.1 .0 as usize),
+                NodeIndex::new(edge.1 .1 as usize),
+            )
+            .unwrap(),
+        );
+        if !is_cyclic_undirected(&g) {
+            break;
+        }
+    }
+    let new_edge = (edge.1 .0, edge.1 .1, -1.);
+    let index = edge.0;
+    edges.remove(index);
+    let mut reverse_edge: Vec<(u32, u32, f32)> = sptree.t.iter().map(|&x| (x.1, x.0, 0.)).collect();
+    reverse_edge.remove(index);
+    edges.append(&mut reverse_edge);
+    edges.push(new_edge);
+    let g = Graph::<(), f32, Directed>::from_edges(edges);
+    let cycle = find_negative_cycle(&g, NodeIndex::new(0));
+
+    debug_println!("in sptre : {:?}", sptree);
+    debug_println!("cycle = {:?}", cycle);
     let mut vec_id_cycle = Vec::new();
     cycle
         .unwrap()
@@ -610,13 +664,13 @@ fn compute_flowchange<N, NUM: CloneableNum>(
                     .contains(&((x.target().index() as u32), (x.source().index() as u32)))
         })
         .collect();
-    //debug_println!("edge_in_cycle before reorder = {:?}", edge_in_cycle);
+    debug_println!("edge_in_cycle before reorder = {:?}", edge_in_cycle);
     edge_in_cycle = edge_in_cycle
         .into_iter()
         .sorted_by_key(|&x| distance_in_cycle(x, &mut cycle))
         .rev()
         .collect();
-    //debug_println!("edge_in_cycle after reorder = {:?}", edge_in_cycle);
+    debug_println!("edge_in_cycle after reorder = {:?}", edge_in_cycle);
     let delta: Vec<NUM> = edge_in_cycle
         .iter()
         .map(|&x| {
@@ -1000,7 +1054,7 @@ pub fn min_cost<NUM: CloneableNum>(
     while entering_arc != None && iteration < max_iteration {
         debug_println!("##################################### ITERATION {:?} #####################################", iteration);
 
-        let mut cycle = find_cycle(&mut tlu_solution, entering_arc.unwrap());
+        let mut cycle = find_cycle_with_arc(&mut tlu_solution, entering_arc.unwrap());
         debug_println!("tlu_solution = {:?}", tlu_solution);
         debug_println!("entering arc = {:?}", entering_arc.unwrap());
         debug_println!("cycle found = {:?}", cycle);
@@ -1032,6 +1086,12 @@ pub fn min_cost<NUM: CloneableNum>(
         entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
         debug_println!("entering arc = {:?}", entering_arc);
         iteration += 1;
+
+    let mut cost: NUM = zero();
+        min_cost_flow_graph
+            .edge_references()
+            .for_each(|x| cost += x.weight().flow);
+        debug_println!("total cost = {:?}", cost);
     }
     if iteration == max_iteration {
         debug_println!("MAX iteration reached");
