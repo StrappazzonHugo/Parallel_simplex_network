@@ -82,11 +82,11 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
 
     debug_println!("sink id = {:?}", sink_id);
 
-    /*//removing orphan nodes from the graph
+    //removing orphan nodes from the graph
     find_orphan_nodes(&mut graph).iter().for_each(|&x| {
         debug_println!("find_orphan nodes : {:?}", x);
         graph.remove_node(x).unwrap();
-    });*/
+    });
 
     sink_id = graph
         .node_indices()
@@ -129,16 +129,21 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
         init_tlu(&mut graph, &mut T, &mut L, &mut U);
     }
     debug_println!("is cyclic {:?}", is_cyclic(&mut T));
-    debug_println!("{:?}", Dot::new(&graph));
+    //debug_println!("{:?}", Dot::new(&graph));
 
     // while T isnt a tree : we add one edge from U to T
     // we cannot obtain a cycle at iteration n since we necessarily
     // have a spanning tree at the iteration n-1
     while !is_tree(&mut T, graph.node_count()) {
         //debug_print!("test");
-        for edge in U.iter().chain(L.iter()) {
+        for (index, edge) in U.iter().enumerate().chain(L.iter().enumerate()) {
             if !is_cyclic_with_arc(&mut T, *edge) {
                 T.push(*edge);
+                if U.contains(edge) {
+                    U.remove(index);
+                } else if L.contains(edge) {
+                    L.remove(index);
+                }
                 break;
             }
         }
@@ -280,8 +285,6 @@ fn resize_flow<NUM: CloneableNum>(
         .edge_references()
         .for_each(|x| graph.edge_weight_mut(x.id()).unwrap().flow = zero());
     debug_println!(
-        "TRY TO MAX_Flow to damand \n {:?}",
-        Dot::new(&(graph.clone()))
     );
     let (resized_flow, max_demand) = max_flow(0, sink_id.index(), graph.clone());
 
@@ -377,7 +380,7 @@ fn compute_node_potential<N, NUM: CloneableNum>(
         .map(|x| (x.0, x.1 .0, x.1 .1))
         .collect();
     id_dist_pred = id_dist_pred.into_iter().sorted_by_key(|&x| x.1).collect();
-    debug_println!("path = {:?}", id_dist_pred);
+    //debug_println!("path = {:?}", id_dist_pred);
     id_dist_pred.iter().skip(1).for_each(|&(id, _, pred)| {
         let edge = graph.find_edge(pred.unwrap(), NodeIndex::new(id));
         pi[id] = if edge != None {
@@ -399,17 +402,17 @@ fn compute_node_potential<N, NUM: CloneableNum>(
 fn update_potential<NUM: CloneableNum>(
     potential: Vec<NUM>,
     sptree: &mut SPTree,
-    leaving_arc: (u32, u32),
+    entering_arc: (u32, u32),
     reduced_cost: &mut HashMap<(i32, i32), NUM>,
 ) -> Vec<NUM> {
     let mut edges: Vec<(u32, u32, f32)> = sptree
         .t
         .iter()
-        .filter(|&&x| x != leaving_arc)
+        .filter(|&&x| x != entering_arc)
         .map(|x| (x.0, x.1, 0.))
         .collect();
-    edges.push((leaving_arc.0, leaving_arc.1, 1.)); // <-- edge separating T1 and T2
-    let g = Graph::<(), f32, Directed>::from_edges(edges);
+    edges.push((entering_arc.0, entering_arc.1, 1.)); // <-- edge separating T1 and T2
+    let g = Graph::<(), f32, Undirected>::from_edges(edges);
     let path_cost = bellman_ford(&g, NodeIndex::new(0)).unwrap().distances;
     let potentials_to_update: Vec<usize> = path_cost
         .iter()
@@ -418,13 +421,13 @@ fn update_potential<NUM: CloneableNum>(
         .map(|x| x.0)
         .collect();
     let mut change: NUM = zero();
-    if potentials_to_update.contains(&(leaving_arc.1 as usize)) {
+    if potentials_to_update.contains(&(entering_arc.1 as usize)) {
         change -= *reduced_cost
-            .get(&(leaving_arc.0 as i32, leaving_arc.1 as i32))
+            .get(&(entering_arc.0 as i32, entering_arc.1 as i32))
             .unwrap();
     } else {
         change += *reduced_cost
-            .get(&(leaving_arc.0 as i32, leaving_arc.1 as i32))
+            .get(&(entering_arc.0 as i32, entering_arc.1 as i32))
             .unwrap();
     }
     potential
@@ -664,13 +667,13 @@ fn compute_flowchange<N, NUM: CloneableNum>(
                     .contains(&((x.target().index() as u32), (x.source().index() as u32)))
         })
         .collect();
-    debug_println!("edge_in_cycle before reorder = {:?}", edge_in_cycle);
+    //debug_println!("edge_in_cycle before reorder = {:?}", edge_in_cycle);
     edge_in_cycle = edge_in_cycle
         .into_iter()
         .sorted_by_key(|&x| distance_in_cycle(x, &mut cycle))
         .rev()
         .collect();
-    debug_println!("edge_in_cycle after reorder = {:?}", edge_in_cycle);
+    //debug_println!("edge_in_cycle after reorder = {:?}", edge_in_cycle);
     let delta: Vec<NUM> = edge_in_cycle
         .iter()
         .map(|&x| {
@@ -738,7 +741,7 @@ where
 
 //updating sptree structure according to the leaving arc
 //removing it from T and putting in L or U depending on the updated flow on the arc
-fn update_sptree_with_leaving<N, NUM: CloneableNum>(
+fn update_sptree_with_leaving<N : Clone + std::fmt::Debug, NUM: CloneableNum>(
     sptree: &mut SPTree,
     leaving_arc: (u32, u32),
     graph: &mut DiGraph<N, CustomEdgeIndices<NUM>>,
@@ -766,6 +769,18 @@ fn update_sptree_with_leaving<N, NUM: CloneableNum>(
     } else {
         updated_sptree.u.push(leaving_arc)
     }
+    /*debug_println!("edge : {:?}, at min capacity ? : {:?} (flow = {:?}", leaving_arc, at_min_capacity, graph
+        .edge_weight(
+            graph
+                .find_edge(
+                    node_index(leaving_arc.0 as usize),
+                    node_index(leaving_arc.1 as usize),
+                )
+                .unwrap(),
+        )
+        .unwrap()
+        .flow); 
+    debug_println!("{:?}", Dot::new(&(graph.clone())));*/
     updated_sptree
 }
 
@@ -1064,18 +1079,21 @@ pub fn min_cost<NUM: CloneableNum>(
         let (leaving_arc, vec_flow_change) =
             compute_flowchange(&mut min_cost_flow_graph, &mut cycle);
 
+        min_cost_flow_graph = update_flow(&mut min_cost_flow_graph, vec_flow_change);
         tlu_solution =
             update_sptree_with_leaving(&mut tlu_solution, leaving_arc, &mut min_cost_flow_graph);
-
-        min_cost_flow_graph = update_flow(&mut min_cost_flow_graph, vec_flow_change);
         debug_println!("{:?}", Dot::new(&min_cost_flow_graph));
-
+        
+         
         potentials = update_potential(
             potentials,
             &mut tlu_solution,
             entering_arc.unwrap(),
             &mut reduced_cost,
         );
+
+        //potentials = compute_node_potential(&mut min_cost_flow_graph, &mut tlu_solution);
+
         debug_println!("potentials = {:?}", potentials);
 
         reduced_cost =

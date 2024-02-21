@@ -56,6 +56,6 @@ fn main() {
 
 
     println!("{:?}", Dot::new(&graph));
-    let min_cost_flow = min_cost(graph, 16);
+    let min_cost_flow = min_cost(graph, 14);
     println!("{:?}", Dot::new(&min_cost_flow));
 }

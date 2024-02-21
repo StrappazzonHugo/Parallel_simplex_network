@@ -124,7 +124,7 @@ int main() {
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n16, 9);
+  ns.stSupply(n0, n16, 14);
 
   ListDigraph::ArcMap<int> res(g);
   ns.run(lemon::NetworkSimplex<ListDigraph>::FIRST_ELIGIBLE);
@@ -132,6 +132,5 @@ int main() {
   cout << "total cost : " << ns.totalCost() << endl;
   for (ListDigraph::ArcIt a(g); a != INVALID; ++a)
     cout << g.id(g.source(a)) << "->"  << g.id(g.target(a)) << " : flow = " << ns.flow(a) << endl;
-  // testing network simplex..
   return 0;
 };
