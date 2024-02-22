@@ -16,7 +16,5 @@ edition = "2021"
 [dependencies]
 debug_print = "1.0.0"
 itertools = "0.12.1"
-num = "0.4.1"
 num-traits = "0.2.18"
-ordered-float = "4.2.0"
 petgraph = "0.6.4"
