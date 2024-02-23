@@ -2,6 +2,7 @@ use main::min_cost;
 use main::CustomEdgeIndices;
 use petgraph::dot::Dot;
 use petgraph::graph::*;
+use std::time::{Duration, SystemTime};
 
 fn main() {
     let mut graph = DiGraph::<u32, CustomEdgeIndices<f64>>::new();
@@ -55,6 +56,15 @@ fn main() {
     graph.add_edge(n14, n16, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
     graph.add_edge(n15, n16, CustomEdgeIndices { cost: (2.), capacity: (12.), flow: (0.), }, );
     println!("{:?}", Dot::new(&graph));
+    let start = SystemTime::now();
     let min_cost_flow = min_cost(graph, 10.0);
+    match start.elapsed() {
+       Ok(elapsed) => {
+           println!("time = {}", elapsed.as_micros());
+       }
+       Err(e) => {
+           println!("Error: {e:?}");
+       }
+   }
     println!("{:?}", Dot::new(&min_cost_flow));
 }

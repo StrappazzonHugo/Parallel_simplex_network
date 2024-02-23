@@ -1,9 +1,10 @@
 #include <lemon/list_graph.h>
 #include <lemon/network_simplex.h>
 #include <ostream>
-
+#include <chrono>
 using namespace lemon;
 using namespace std;
+using namespace std::chrono;
 
 int main() {
   ListDigraph g;
@@ -127,7 +128,11 @@ int main() {
   ns.stSupply(n0, n16, 10);
 
   ListDigraph::ArcMap<int> res(g);
+  auto start = high_resolution_clock::now();
   ns.run(lemon::NetworkSimplex<ListDigraph>::FIRST_ELIGIBLE);
+  auto stop = high_resolution_clock::now(); 
+  auto duration = duration_cast<microseconds>(stop - start);
+cout << "time : " << duration.count() << endl;
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
   for (ListDigraph::ArcIt a(g); a != INVALID; ++a)

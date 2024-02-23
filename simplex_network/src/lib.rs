@@ -281,7 +281,6 @@ fn resize_flow<NUM: CloneableNum>(
     debug_println!();
     let (resized_flow, max_demand) = max_flow(0, sink_id.index(), graph.clone());
 
-    debug_println!("RESIZED_FLOW =  {:?}", Dot::new(&(resized_flow)));
     resized_flow.edge_references().for_each(|x| {
         graph.edge_weight_mut(x.id()).unwrap().flow = x.weight().flow;
 
@@ -310,9 +309,11 @@ fn compute_node_potentials<N, NUM: CloneableNum>(
     let temp_graph = Graph::<(), f32, Undirected>::from_edges(edges);
     let path = bellman_ford(&temp_graph, NodeIndex::new(0)).unwrap();
     let distances: Vec<i32> = path.distances.iter().map(|x| x.round() as i32).collect();
+
     //decompose Path type from petgraph into vector
     let dist_pred: Vec<(&i32, &Option<NodeIndex>)> =
         distances.iter().zip(path.predecessors.iter()).collect();
+
     //vector of the form : Vec<(NodeIndex, DistanceToRoot, predecessorIndex)>
     let mut id_dist_pred: Vec<(usize, &i32, &Option<NodeIndex>)> = dist_pred
         .iter()
@@ -342,7 +343,7 @@ fn update_node_potentials<NUM: CloneableNum>(
     potential: Vec<NUM>,
     sptree: &mut SPTree,
     entering_arc: (u32, u32),
-    reduced_cost: &mut HashMap<(i32, i32), NUM>,
+    reduced_cost: &mut HashMap<(u32, u32), NUM>,
 ) -> Vec<NUM> {
     let mut edges: Vec<(u32, u32, f32)> = sptree
         .t
@@ -362,11 +363,11 @@ fn update_node_potentials<NUM: CloneableNum>(
     let mut change: NUM = zero();
     if potentials_to_update.contains(&(entering_arc.1 as usize)) {
         change -= *reduced_cost
-            .get(&(entering_arc.0 as i32, entering_arc.1 as i32))
+            .get(&(entering_arc.0, entering_arc.1))
             .unwrap();
     } else {
         change += *reduced_cost
-            .get(&(entering_arc.0 as i32, entering_arc.1 as i32))
+            .get(&(entering_arc.0, entering_arc.1))
             .unwrap();
     }
     potential
@@ -388,11 +389,11 @@ fn compute_reduced_cost<N, NUM: CloneableNum>(
     pi: &mut Vec<NUM>,
     graph: &mut DiGraph<N, CustomEdgeIndices<NUM>>,
     sptree: &mut SPTree,
-) -> HashMap<(i32, i32), NUM> {
-    let mut reduced_cost: HashMap<(i32, i32), NUM> = HashMap::new();
+) -> HashMap<(u32, u32), NUM> {
+    let mut reduced_cost: HashMap<(u32, u32), NUM> = HashMap::new();
     sptree.l.iter().for_each(|&(u, v)| {
         reduced_cost.insert(
-            (u as i32, v as i32),
+            (u, v),
             graph
                 .edge_weight(
                     graph
@@ -407,7 +408,7 @@ fn compute_reduced_cost<N, NUM: CloneableNum>(
     });
     sptree.u.iter().for_each(|&(u, v)| {
         reduced_cost.insert(
-            (u as i32, v as i32),
+            (u, v),
             graph
                 .edge_weight(
                     graph
@@ -421,7 +422,7 @@ fn compute_reduced_cost<N, NUM: CloneableNum>(
         );
     });
     sptree.t.iter().for_each(|&(u, v)| {
-        reduced_cost.insert((u as i32, v as i32), zero());
+        reduced_cost.insert((u, v), zero());
     });
     reduced_cost
 }
@@ -430,30 +431,30 @@ fn compute_reduced_cost<N, NUM: CloneableNum>(
 //probably better way to manage type Option<(_,_)>
 fn find_entering_arc<NUM: CloneableNum>(
     sptree: &mut SPTree,
-    reduced_cost: &mut HashMap<(i32, i32), NUM>,
+    reduced_cost: &mut HashMap<(u32, u32), NUM>,
 ) -> Option<(u32, u32)> {
     let min_l = sptree.l.iter().min_by(|a, b| {
         reduced_cost
-            .get(&(a.0 as i32, a.1 as i32))
+            .get(&(a.0, a.1))
             .unwrap()
-            .partial_cmp(reduced_cost.get(&(b.0 as i32, b.1 as i32)).unwrap())
+            .partial_cmp(reduced_cost.get(&(b.0, b.1)).unwrap())
             .unwrap()
     });
     let max_u = sptree.u.iter().max_by(|a, b| {
         reduced_cost
-            .get(&(a.0 as i32, a.1 as i32))
+            .get(&(a.0, a.1))
             .unwrap()
-            .partial_cmp(reduced_cost.get(&(b.0 as i32, b.1 as i32)).unwrap())
+            .partial_cmp(reduced_cost.get(&(b.0, b.1)).unwrap())
             .unwrap()
     });
     let zero: NUM = zero();
     let rc_min_l = if min_l != None {
-        reduced_cost.get(&(min_l.unwrap().0 as i32, min_l.unwrap().1 as i32))
+        reduced_cost.get(&(min_l.unwrap().0, min_l.unwrap().1))
     } else {
         Some(&zero)
     };
     let rc_max_u = if max_u != None {
-        reduced_cost.get(&(max_u.unwrap().0 as i32, max_u.unwrap().1 as i32))
+        reduced_cost.get(&(max_u.unwrap().0, max_u.unwrap().1))
     } else {
         Some(&zero)
     };
@@ -561,7 +562,7 @@ fn is_forward<NUM: CloneableNum>(
     test.contains(&(i as u32, j as u32))
 }
 
-//decompose cycle in tuple_altered_cycle variable and count distance using index in vector
+//decompose cycle in tuple_altered_cycle variable ordered in distance to the entering arc
 fn distances_in_cycle(cycle: &mut Vec<u32>) -> Vec<(u32, u32)> {
     let mut altered_cycle = cycle.clone();
     altered_cycle.push(*cycle.first().unwrap());
@@ -569,11 +570,6 @@ fn distances_in_cycle(cycle: &mut Vec<u32>) -> Vec<(u32, u32)> {
         .into_iter()
         .tuple_windows::<(u32, u32)>()
         .collect();
-    /*let res = tuple_altered_cycle
-    .iter()
-    .enumerate()
-    .find(|&(_, x)| x == &(i as u32, j as u32) || x == &(j as u32, i as u32))
-    .unwrap();*/
     return tuple_altered_cycle;
 }
 
