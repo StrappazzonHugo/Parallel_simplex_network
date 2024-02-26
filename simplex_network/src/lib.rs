@@ -64,11 +64,11 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
     demand: NUM,
 ) -> (SPTree, DiGraph<u32, CustomEdgeIndices<NUM>>) {
     let source_id = 0;
+    let initial_number_of_node:u32 = (graph.node_count()-1) as u32;
+    debug_println!("initial_number_of_node = {:?}", initial_number_of_node);
     let mut sink_id = graph
         .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &99u32)) //Temporary the sink is labelled with
-        //id 99, easier to find after removing
-        //nodes
+        .find(|&x| (graph.node_weight(x).unwrap() == &initial_number_of_node)) 
         .unwrap();
     let mut _max_demand: NUM = zero();
     (graph, _max_demand) = max_flow(source_id, sink_id.index(), graph);
@@ -84,7 +84,7 @@ fn initialization<'a, NUM: CloneableNum, Ix>(
 
     sink_id = graph
         .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &99u32))
+        .find(|&x| (graph.node_weight(x).unwrap() == &initial_number_of_node))
         .unwrap();
     debug_println!("sink id = {:?}", sink_id);
 
@@ -343,7 +343,7 @@ fn compute_node_potentials<NUM: CloneableNum>(
 //Updating potential inspired by : NETWORK FLOWS Theory, Algorithms, and Applications (p.419)
 //modified such that the difference from T1 and T2 is done with a BellmanFord algorithm
 //detecting the single edge cost put to 1 that divide T1 and T2 in T
-fn update_node_potentials<NUM: CloneableNum>(
+fn par_update_node_potentials<NUM: CloneableNum>(
     potential: Vec<NUM>,
     sptree: &mut SPTree,
     entering_arc: (u32, u32),
@@ -351,7 +351,7 @@ fn update_node_potentials<NUM: CloneableNum>(
 ) -> Vec<NUM> {
     let mut edges: Vec<(u32, u32, f32)> = sptree
         .t
-        .iter()
+        .par_iter()
         .filter(|&&x| x != entering_arc)
         .map(|x| (x.0, x.1, 0.))
         .collect();
@@ -359,7 +359,7 @@ fn update_node_potentials<NUM: CloneableNum>(
     let g = Graph::<(), f32, Undirected>::from_edges(edges);
     let path_cost = bellman_ford(&g, NodeIndex::new(0)).unwrap().distances;
     let potentials_to_update: Vec<usize> = path_cost
-        .iter()
+        .par_iter()
         .enumerate()
         .filter(|&(_, cost)| cost > &0.)
         .map(|x| x.0)
@@ -371,7 +371,7 @@ fn update_node_potentials<NUM: CloneableNum>(
         change += *reduced_cost.get(&(entering_arc.0, entering_arc.1)).unwrap();
     }
     potential
-        .iter()
+        .par_iter()
         .enumerate()
         .map(|(index, &value)| {
             if potentials_to_update.contains(&index) {
@@ -969,7 +969,7 @@ pub fn min_cost<NUM: CloneableNum>(
         update_flow(&mut min_cost_flow_graph, vec_flow_change);
         par_update_sptree_with_leaving(&mut tlu_solution, leaving_arc, &mut min_cost_flow_graph);
 
-        potentials = update_node_potentials(
+        potentials = par_update_node_potentials(
             potentials,
             &mut tlu_solution,
             entering_arc.unwrap(),
