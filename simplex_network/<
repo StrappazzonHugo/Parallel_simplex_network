@@ -12,8 +12,8 @@ use petgraph::graph::DefaultIx;
 use petgraph::graph::EdgeReference;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
-use rayon::prelude::*;
 use std::collections::HashMap;
+use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
 struct SPTree {
@@ -366,9 +366,13 @@ fn update_node_potentials<NUM: CloneableNum>(
         .collect();
     let mut change: NUM = zero();
     if potentials_to_update.contains(&(entering_arc.1 as usize)) {
-        change -= *reduced_cost.get(&(entering_arc.0, entering_arc.1)).unwrap();
+        change -= *reduced_cost
+            .get(&(entering_arc.0, entering_arc.1))
+            .unwrap();
     } else {
-        change += *reduced_cost.get(&(entering_arc.0, entering_arc.1)).unwrap();
+        change += *reduced_cost
+            .get(&(entering_arc.0, entering_arc.1))
+            .unwrap();
     }
     potential
         .iter()
@@ -477,36 +481,6 @@ fn find_entering_arc<NUM: CloneableNum>(
     } else {
         return Some(*max_u.unwrap());
     }
-}
-
-fn par_find_entering_arc<NUM: CloneableNum>(
-    sptree: &mut SPTree,
-    reduced_cost: &mut HashMap<(u32, u32), NUM>,
-) -> Option<(u32, u32)> {
-    let min_l = sptree.l.par_iter().min_by(|a, b| {
-        reduced_cost
-            .get(&(a.0, a.1))
-            .unwrap()
-            .partial_cmp(reduced_cost.get(&(b.0, b.1)).unwrap())
-            .unwrap()
-    });
-    let max_u = sptree.u.par_iter().max_by(|a, b| {
-        reduced_cost
-            .get(&(a.0, a.1))
-            .unwrap()
-            .partial_cmp(reduced_cost.get(&(b.0, b.1)).unwrap())
-            .unwrap()
-    });
-    match (min_l, max_u) {
-        (Some(min_l), Some(max_u)) => if reduced_cost.get(min_l) >= Some(&(zero())) && reduced_cost.get(max_u) <= Some(&(zero())) { None }
-                                      else if reduced_cost.get(min_l) >= Some(&(zero())) { Some(*max_u) } 
-                                      else if reduced_cost.get(max_u) <= Some(&(zero())) { Some(*min_l) }
-                                      else if (zero::<NUM>() - *reduced_cost.get(min_l).unwrap()) >= *reduced_cost.get(max_u).unwrap() { Some(*min_l) }
-                                      else { Some(*max_u) }
-        (Some(min_l), None) => if reduced_cost.get(min_l) < Some(&(zero())) { Some(*min_l) } else {None},
-        (None, Some(max_u)) => if reduced_cost.get(max_u) > Some(&(zero())) { Some(*max_u) } else {None},
-        (None, None) => None,
-    } 
 }
 
 //Using Bellmanford algorithm to find negative weight cycle
@@ -709,15 +683,16 @@ fn update_flow<NUM: CloneableNum>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     flow_change: Vec<((u32, u32), NUM)>,
 ) {
-    flow_change.into_iter().for_each(|((i, j), a)| {
+    let test = graph.clone();
+    flow_change.par_iter().for_each(|((i, j), a)| {
         graph
             .edge_weight_mut(
                 graph
-                    .find_edge(node_index(i as usize), node_index(j as usize))
+                    .find_edge(node_index(*i as usize), node_index(*j as usize))
                     .unwrap(),
             )
             .unwrap()
-            .flow += a;
+            .flow += *a;
     });
 }
 
@@ -727,10 +702,9 @@ fn par_update_sptree_with_leaving<NUM: CloneableNum>(
     sptree: &mut SPTree,
     leaving_arc: (u32, u32),
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
-) {
+){
     sptree.t = sptree
-        .t
-        .clone()
+        .t.clone()
         .into_par_iter()
         .filter(|&x| x != leaving_arc)
         .collect();
@@ -758,13 +732,11 @@ fn par_update_sptree_with_entering(sptree: &mut SPTree, entering_arc: Option<(u3
     sptree.t.push(entering_arc.unwrap());
     sptree.l = sptree
         .l
-        .clone()
         .into_par_iter()
         .filter(|&x| x != entering_arc.unwrap())
         .collect();
     sptree.u = sptree
         .u
-        .clone()
         .into_par_iter()
         .filter(|&x| x != entering_arc.unwrap())
         .collect();
@@ -946,7 +918,7 @@ pub fn min_cost<NUM: CloneableNum>(
     debug_println!("tlu_solution = {:?}", tlu_solution);
     debug_println!("reduced_cost = {:?}", reduced_cost);
 
-    let mut entering_arc = par_find_entering_arc(&mut tlu_solution, &mut reduced_cost);
+    let mut entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
     debug_println!("entering arc = {:?}", entering_arc);
 
     let mut iteration = 1;
@@ -984,7 +956,7 @@ pub fn min_cost<NUM: CloneableNum>(
 
         debug_println!("{:?}", Dot::new(&min_cost_flow_graph));
 
-        entering_arc = par_find_entering_arc(&mut tlu_solution, &mut reduced_cost);
+        entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
         debug_println!("entering arc = {:?}", entering_arc);
         iteration += 1;
 
