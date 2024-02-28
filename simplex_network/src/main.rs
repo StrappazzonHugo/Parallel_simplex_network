@@ -1,70 +1,93 @@
 use main::min_cost;
 use main::CustomEdgeIndices;
+use petgraph::data::FromElements;
 use petgraph::dot::Dot;
 use petgraph::graph::*;
+use rand::Rng;
 use std::time::SystemTime;
 
+const NODE_NUMBER: u32 = 1000;
+
 fn main() {
-    let mut graph = DiGraph::<u32, CustomEdgeIndices<f64>>::new();
+    let mut rng = rand::thread_rng();
+    let node_number = NODE_NUMBER * 2;
 
-    let n0 = graph.add_node(0);
-    let n1 = graph.add_node(1);
-    let n2 = graph.add_node(2);
-    let n3 = graph.add_node(3);
-    let n4 = graph.add_node(4);
-    let n5 = graph.add_node(5);
-    let n6 = graph.add_node(6);
-    let n7 = graph.add_node(7);
-    let n8 = graph.add_node(8);
-    let n9 = graph.add_node(9);
-    let n10 = graph.add_node(10);
-    let n11 = graph.add_node(11);
-    let n12 = graph.add_node(12);
-    let n13 = graph.add_node(13);
-    let n14 = graph.add_node(14);
-    let n15 = graph.add_node(15);
-    let n16 = graph.add_node(16);
-    
-    graph.add_edge(n0, n1, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n0, n2, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), }, );
-    graph.add_edge(n0, n3, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), }, );
-    graph.add_edge(n0, n4, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n0, n5, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
+    let mut coord: Vec<(i64, i64)> = vec![(0, 0); (node_number + 1) as usize];
 
-    graph.add_edge(n1, n6, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n2, n6, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), }, );
-    graph.add_edge(n2, n3, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n3, n7, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
-    graph.add_edge(n3, n4, CustomEdgeIndices { cost: (2.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n4, n9, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n5, n8, CustomEdgeIndices { cost: (2.), capacity: (7.), flow: (0.), }, );
+    let mut graph = DiGraph::<u32, CustomEdgeIndices<i64>>::new();
 
-    graph.add_edge(n6, n10, CustomEdgeIndices { cost: (1.), capacity: (11.), flow: (0.), }, );
-    graph.add_edge(n6, n7, CustomEdgeIndices { cost: (2.), capacity: (7.), flow: (0.), }, );
-    graph.add_edge(n7, n8, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), }, );
-    graph.add_edge(n8, n10, CustomEdgeIndices { cost: (1.), capacity: (7.), flow: (0.), }, );
-    graph.add_edge(n8, n11, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), }, );
-    graph.add_edge(n9, n11, CustomEdgeIndices { cost: (1.), capacity: (5.), flow: (0.), }, );
+    let source = graph.add_node(0); //source
 
-    graph.add_edge(n10, n12, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n10, n14, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), }, );
-    graph.add_edge(n11, n15, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
-    graph.add_edge(n11, n13, CustomEdgeIndices { cost: (3.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n13, n15, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), }, );
+    //One part
+    for i in 1..NODE_NUMBER + 1 {
+        let n = graph.add_node(i);
+        let x: i64 = (rng.gen::<f32>() * 10000f32) as i64;
+        let y: i64 = (rng.gen::<f32>() * 10000f32) as i64;
+        coord[i as usize] = (x, y);
+        graph.add_edge(
+            source,
+            n,
+            CustomEdgeIndices {
+                cost: (0),
+                capacity: (100000000),
+                flow: (0),
+            },
+        );
+    }
+    //the other part
+    for i in NODE_NUMBER + 1..node_number + 1 {
+        graph.add_node(i);
+        let x: i64 = (rng.gen::<f32>() * 10000f32) as i64;
+        let y: i64 = (rng.gen::<f32>() * 10000f32) as i64;
+        coord[i as usize] = (x, y);
+    }
 
-    graph.add_edge(n14, n15, CustomEdgeIndices { cost: (2.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n14, n16, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
-    graph.add_edge(n15, n16, CustomEdgeIndices { cost: (2.), capacity: (12.), flow: (0.), }, );
-    //println!("{:?}", Dot::new(&graph));
+    let sink = graph.add_node(node_number + 1);
+    for i in NODE_NUMBER + 1..node_number + 1 {
+        graph.add_edge(
+            NodeIndex::new(i as usize),
+            sink,
+            CustomEdgeIndices {
+                cost: (0),
+                capacity: (100000000),
+                flow: (0),
+            },
+        );
+    }
+
+    for i in 1..NODE_NUMBER + 1 {
+        for j in NODE_NUMBER + 1..node_number + 1 {
+            let cost = ((coord[i as usize].0 - coord[j as usize].0) as f32
+                * (coord[i as usize].0 - coord[j as usize].0) as f32
+                + (coord[i as usize].1 - coord[j as usize].1) as f32
+                    * (coord[i as usize].1 - coord[j as usize].1) as f32)
+                .sqrt() as i64;
+            graph.add_edge(
+                NodeIndex::new(i as usize),
+                NodeIndex::new(j as usize),
+                CustomEdgeIndices {
+                    cost: (cost),
+                    capacity: (10),
+                    flow: (0),
+                },
+            );
+        }
+    }
+
     let start = SystemTime::now();
-    let min_cost_flow = min_cost(graph, 10.0);
+    let demand: i64 = 10000;
+    println!(
+        "node nb = {:?}, demand = {:?}",
+        graph.node_count(),
+        demand
+    );
+    let min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i64));
     match start.elapsed() {
-       Ok(elapsed) => {
-           println!("time = {}", elapsed.as_micros());
-       }
-       Err(e) => {
-           println!("Error: {e:?}");
-       }
-   }
-   println!("{:?}", Dot::new(&min_cost_flow));
+        Ok(elapsed) => {
+            println!("time = {}", elapsed.as_secs());
+        }
+        Err(e) => {
+            println!("Error: {e:?}");
+        }
+    }
 }
