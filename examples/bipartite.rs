@@ -6,7 +6,7 @@ use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const NODE_NUMBER: u32 = 1000;
+const NODE_NUMBER: u32 = 5;
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -75,7 +75,7 @@ fn main() {
     }
 
     let start = SystemTime::now();
-    let demand: i64 = 100;
+    let demand: i64 = 10000;
     println!(
         "node nb = {:?}, demand = {:?}",
         graph.node_count(),

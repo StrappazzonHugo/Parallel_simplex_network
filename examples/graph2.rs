@@ -1,3 +1,14 @@
+use main::min_cost;
+use main::CustomEdgeIndices;
+use petgraph::data::FromElements;
+use petgraph::dot::Dot;
+use petgraph::graph::*;
+use rand::Rng;
+use std::time::SystemTime;
+
+const NODE_NUMBER: u32 = 10;
+
+fn main() {
     let mut graph = DiGraph::<u32, CustomEdgeIndices<i32>>::new();
     let s = graph.add_node(0);
     let n1 = graph.add_node(1);
@@ -83,3 +94,17 @@
             flow: (0),
         },
     );
+    //println!("{:?}", Dot::new(&graph));
+    let start = SystemTime::now();
+    let min_cost_flow = min_cost(graph, 4);
+    match start.elapsed() {
+       Ok(elapsed) => {
+           println!("time = {}", elapsed.as_micros());
+       }
+       Err(e) => {
+           println!("Error: {e:?}");
+       }
+   }
+   println!("{:?}", Dot::new(&min_cost_flow));
+
+}

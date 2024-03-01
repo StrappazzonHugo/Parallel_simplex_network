@@ -1,8 +1,12 @@
 use main::min_cost;
 use main::CustomEdgeIndices;
+use petgraph::data::FromElements;
 use petgraph::dot::Dot;
 use petgraph::graph::*;
+use rand::Rng;
 use std::time::SystemTime;
+
+const NODE_NUMBER: u32 = 10;
 
 fn main() {
     let mut graph = DiGraph::<u32, CustomEdgeIndices<f64>>::new();
@@ -23,8 +27,8 @@ fn main() {
     let n13 = graph.add_node(13);
     let n14 = graph.add_node(14);
     let n15 = graph.add_node(15);
-    let n16 = graph.add_node(99);
-    
+    let n16 = graph.add_node(16);
+
     graph.add_edge(n0, n1, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
     graph.add_edge(n0, n2, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), }, );
     graph.add_edge(n0, n3, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), }, );
@@ -67,4 +71,5 @@ fn main() {
        }
    }
    println!("{:?}", Dot::new(&min_cost_flow));
+
 }
