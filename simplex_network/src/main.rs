@@ -75,7 +75,7 @@ fn main() {
     }
 
     let start = SystemTime::now();
-    let demand: i64 = 100;
+    let demand: i64 = 10;
     println!(
         "node nb = {:?}, demand = {:?}",
         graph.node_count(),
