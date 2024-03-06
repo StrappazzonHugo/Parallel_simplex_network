@@ -58,7 +58,7 @@ int main() {
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n1, 10000);
+  ns.stSupply(n0, n1, 20000);
 
   ListDigraph::ArcMap<int> res(g);
   cout << "starting..." << endl;

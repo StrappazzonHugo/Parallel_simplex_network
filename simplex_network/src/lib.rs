@@ -1,9 +1,9 @@
+use debug_print::debug_print;
 use debug_print::debug_println;
 use itertools::Itertools;
 use num_traits::identities::zero;
 use num_traits::Num;
 use petgraph::algo::bellman_ford;
-use petgraph::algo::find_negative_cycle;
 use petgraph::dot::Dot;
 use petgraph::graph::EdgeIndex;
 use petgraph::graph::NodeIndex;
@@ -116,14 +116,13 @@ fn __initialization<'a, NUM: CloneableNum>(
         }
     });
 
-    let mut pred: Vec<Option<NodeIndex>> = vec![Some(artificial_root); graph.node_count() - 1];
-    pred.push(None);
+    let mut predecessors: Vec<Option<NodeIndex>> =
+        vec![Some(artificial_root); graph.node_count() - 1];
+    predecessors.push(None);
 
-    println!("{:?}", pred);
-    assert_eq!(1, 2);
     SPTree {
         t: tree_arcs,
-        pred: pred,
+        pred: predecessors,
         l: lower_arcs,
         u: upper_arcs,
     }
@@ -188,7 +187,7 @@ fn compute_node_potentials<'a, NUM: CloneableNum>(
 //Updating potential inspired by : NETWORK FLOWS Theory, Algorithms, and Applications (p.19)
 //modified such that the difference from T1 and T2 is done with a BellmanFord algorithm
 //detecting the single edge cost put to 1 that divide T1 and T2 in T
-fn par_update_node_potentials<'a, NUM: CloneableNum>(
+fn update_node_potentials<'a, NUM: CloneableNum>(
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
     potential: Vec<NUM>,
     sptree: &mut SPTree,
@@ -242,6 +241,52 @@ fn par_update_node_potentials<'a, NUM: CloneableNum>(
         .collect()
 }
 
+fn _update_node_potentials<'a, NUM: CloneableNum>(
+    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
+    potential: Vec<NUM>,
+    sptree: &mut SPTree,
+    entering_arc: EdgeIndex,
+    reduced_cost: &mut Vec<NUM>,
+) -> Vec<NUM> {
+    let (k, l) = graph.edge_endpoints(entering_arc).unwrap();
+    let mut change: NUM = zero();
+    let start: NodeIndex;
+    if sptree.pred[k.index()] == Some(l) {
+        change += reduced_cost[entering_arc.index()];
+        start = k;
+    } else {
+        change -= reduced_cost[entering_arc.index()];
+        start = l;
+    }
+    let mut potentials_to_update: Vec<usize> = Vec::new();
+    let mut new_vec: Vec<usize> = vec![start.index()];
+    let mut prev_vec: Vec<usize>;
+    while new_vec != [] {
+        prev_vec = new_vec.clone();
+        potentials_to_update.append(&mut new_vec);
+        new_vec.clear();
+        prev_vec.iter().for_each(|&x| {
+            sptree
+                .pred
+                .iter()
+                .enumerate()
+                .filter(|(_, &y)| y == Some(NodeIndex::new(x)))
+                .for_each(|(index, _)| new_vec.push(index));
+        });
+    }
+    potential
+        .iter()
+        .enumerate()
+        .map(|(index, &value)| {
+            if potentials_to_update.contains(&index) {
+                value + change
+            } else {
+                value
+            }
+        })
+        .collect()
+}
+
 //Compute reduced cost such that : for any edge (i, j) in T : C^pi_ij = C_ij - pi(i) + pi(j) = 0
 //                                 for any edge (i, j) notin T : C^pi_ij = C_ij - pi(i) + pi(j)
 fn compute_reduced_cost<'a, NUM: CloneableNum>(
@@ -250,7 +295,12 @@ fn compute_reduced_cost<'a, NUM: CloneableNum>(
     sptree: &mut SPTree,
 ) -> Vec<NUM> {
     let mut reduced_cost: Vec<NUM> = vec![zero(); graph.edge_count()];
-    sptree.l.iter().chain(sptree.u.iter()).for_each(|&x| {
+    sptree.l.iter().for_each(|&x| {
+        reduced_cost[x.index()] = graph.edge_weight(x).unwrap().cost
+            - pi[graph.edge_endpoints(x).unwrap().0.index()]
+            + pi[graph.edge_endpoints(x).unwrap().1.index()];
+    });
+    sptree.u.iter().for_each(|&x| {
         reduced_cost[x.index()] = graph.edge_weight(x).unwrap().cost
             - pi[graph.edge_endpoints(x).unwrap().0.index()]
             + pi[graph.edge_endpoints(x).unwrap().1.index()];
@@ -258,62 +308,7 @@ fn compute_reduced_cost<'a, NUM: CloneableNum>(
     reduced_cost
 }
 
-/*
-fn par_find_entering_arc<'a, NUM: CloneableNum>(
-    sptree: &mut SPTree,
-    reduced_cost: &mut HashMap<EdgeIndex, NUM>,
-) -> Option<EdgeIndex> {
-    let min_l = sptree.l.iter().min_by(|a, b| {
-        reduced_cost
-            .get(&a)
-            .unwrap()
-            .partial_cmp(reduced_cost.get(&b).unwrap())
-            .unwrap()
-    });
-    let max_u = sptree.u.iter().max_by(|a, b| {
-        reduced_cost
-            .get(&a)
-            .unwrap()
-            .partial_cmp(reduced_cost.get(&b).unwrap())
-            .unwrap()
-    });
-    match (min_l, max_u) {
-        (Some(min_l), Some(max_u)) => {
-            if reduced_cost.get(&min_l) >= Some(&(zero()))
-                && reduced_cost.get(&max_u) <= Some(&(zero()))
-            {
-                None
-            } else if reduced_cost.get(&min_l) >= Some(&(zero())) {
-                Some(*max_u)
-            } else if reduced_cost.get(&max_u) <= Some(&(zero())) {
-                Some(*min_l)
-            } else if (zero::<NUM>() - *reduced_cost.get(&min_l).unwrap())
-                >= *reduced_cost.get(&max_u).unwrap()
-            {
-                Some(*min_l)
-            } else {
-                Some(*max_u)
-            }
-        }
-        (Some(min_l), None) => {
-            if reduced_cost.get(&min_l) < Some(&(zero())) {
-                Some(*min_l)
-            } else {
-                None
-            }
-        }
-        (None, Some(max_u)) => {
-            if reduced_cost.get(&max_u) > Some(&(zero())) {
-                Some(*max_u)
-            } else {
-                None
-            }
-        }
-        (None, None) => None,
-    }
-}*/
-
-fn par_find_entering_arc<'a, NUM: CloneableNum>(
+fn find_entering_arc<'a, NUM: CloneableNum>(
     sptree: &mut SPTree,
     reduced_cost: &mut Vec<NUM>,
 ) -> Option<EdgeIndex> {
@@ -359,52 +354,35 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
     sptree: &mut SPTree,
     entering_arc: EdgeIndex,
 ) -> Vec<NodeIndex> {
-    let is_in_u = sptree.u.iter().contains(&entering_arc);
-    let mut edges: Vec<(u32, u32, f32)> = sptree
-        .t
-        .iter()
-        .map(|&x| {
-            (
-                graph.edge_endpoints(x).unwrap().0.index() as u32,
-                graph.edge_endpoints(x).unwrap().1.index() as u32,
-                0f32,
-            )
-        })
-        .collect();
-    let mut edges1: Vec<(u32, u32, f32)> = sptree
-        .t
-        .iter()
-        .map(|&x| {
-            (
-                graph.edge_endpoints(x).unwrap().1.index() as u32,
-                graph.edge_endpoints(x).unwrap().0.index() as u32,
-                0f32,
-            )
-        })
-        .collect();
-    edges.append(&mut edges1);
-    if is_in_u {
-        edges.push((
-            graph.edge_endpoints(entering_arc).unwrap().1.index() as u32,
-            graph.edge_endpoints(entering_arc).unwrap().0.index() as u32,
-            -1f32,
-        ));
-    } else {
-        edges.push((
-            graph.edge_endpoints(entering_arc).unwrap().0.index() as u32,
-            graph.edge_endpoints(entering_arc).unwrap().1.index() as u32,
-            -1f32,
-        ));
-    }
-    let g = Graph::<(), f32, Directed>::from_edges(edges);
-    let mut cycle = find_negative_cycle(&g, NodeIndex::new(graph.node_count() - 1)).unwrap();
+    let (i, j) = graph.edge_endpoints(entering_arc).unwrap();
+    let mut path_from_i: Vec<NodeIndex> = Vec::new();
+    let mut path_from_j: Vec<NodeIndex> = Vec::new();
 
-    while (cycle[0], cycle[1]) != graph.edge_endpoints(entering_arc).unwrap()
-        && (cycle[1], cycle[0]) != graph.edge_endpoints(entering_arc).unwrap()
-    {
-        cycle.rotate_left(1);
+    let mut current_node: Option<NodeIndex> = Some(i);
+    while !current_node.is_none() {
+        path_from_i.push(current_node.unwrap());
+        current_node = sptree.pred[current_node.unwrap().index()];
     }
-    cycle
+    current_node = Some(j);
+    while !current_node.is_none() {
+        path_from_j.push(current_node.unwrap());
+        current_node = sptree.pred[current_node.unwrap().index()];
+    }
+
+    for (i, i_node) in path_from_i.iter().enumerate() {
+        if path_from_j.contains(i_node) {
+            let j = path_from_j
+                .iter()
+                .find_position(|&x| x == i_node)
+                .unwrap()
+                .0;
+            path_from_j.truncate(j + 1);
+            path_from_i.truncate(i);
+            path_from_i.iter().rev().for_each(|&x| path_from_j.push(x));
+            break;
+        }
+    }
+    path_from_j
 }
 
 //checking if the specified edge is in forward direction according to a cycle
@@ -488,7 +466,7 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         .enumerate()
         .min_by(|x, y| x.1.partial_cmp(y.1).unwrap())
         .unwrap();
-    let farthest_blocking_edge: petgraph::graph::EdgeIndex = edge_in_cycle[flowchange.0];
+    let farthest_blocking_edge: EdgeIndex = edge_in_cycle[flowchange.0];
     if *flowchange.1 != zero::<NUM>() {
         edge_in_cycle.iter().for_each(|&x| {
             let endpoints = graph.edge_endpoints(x).unwrap();
@@ -502,109 +480,84 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
     farthest_blocking_edge
 }
 
-//updating sptree structure according to the leaving arc
-//removing it from T and putting in L or U depending on the updated flow on the arc
-fn par_update_sptree_with_leaving<'a, NUM: CloneableNum>(
-    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
+/* Update sptree structure according to entering arc and leaving arc,
+* reorder predecessors to keep tree coherent tree structure from one basis
+* to another.
+*/
+fn _update_sptree<NUM: CloneableNum>(
+    graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     sptree: &mut SPTree,
+    entering_arc: EdgeIndex,
     leaving_arc: EdgeIndex,
 ) {
-    sptree.t = sptree
-        .t
-        .clone()
-        .into_iter()
-        .filter(|&x| x != leaving_arc)
-        .collect();
-    let at_min_capacity: bool = graph.edge_weight(leaving_arc).unwrap().flow == zero();
+    if entering_arc != leaving_arc {
+        let (i, j) = graph.edge_endpoints(entering_arc).unwrap();
+        let (k, l) = graph.edge_endpoints(leaving_arc).unwrap();
+        if sptree.pred[k.index()] == Some(l) {
+            sptree.pred[k.index()] = None;
+        } else {
+            sptree.pred[l.index()] = None;
+        }
+        let mut path_from_i: Vec<NodeIndex> = Vec::new();
+        let mut path_from_j: Vec<NodeIndex> = Vec::new();
 
-    if at_min_capacity {
-        sptree.l.push(leaving_arc);
-    } else {
-        sptree.u.push(leaving_arc)
+        let mut current_node: Option<NodeIndex> = Some(i);
+        while !current_node.is_none() {
+            path_from_i.push(current_node.unwrap());
+            current_node = sptree.pred[current_node.unwrap().index()];
+        }
+        current_node = Some(j);
+        while !current_node.is_none() {
+            path_from_j.push(current_node.unwrap());
+            current_node = sptree.pred[current_node.unwrap().index()];
+        }
+        if path_from_i[path_from_i.len() - 1] != NodeIndex::new(graph.node_count() - 1) {
+            sptree.pred[i.index()] = Some(j);
+            path_from_i
+                .iter()
+                .enumerate()
+                .skip(1)
+                .for_each(|(index, &x)| sptree.pred[x.index()] = Some(path_from_i[index - 1]));
+        } else {
+            sptree.pred[j.index()] = Some(i);
+            path_from_j
+                .iter()
+                .enumerate()
+                .skip(1)
+                .for_each(|(index, &x)| sptree.pred[x.index()] = Some(path_from_j[index - 1]));
+        }
     }
-}
-
-//adding entering_arc to T arc set of sptree
-fn par_update_sptree_with_entering(sptree: &mut SPTree, entering_arc: Option<EdgeIndex>) {
-    sptree.t.push(entering_arc.unwrap());
-    sptree.l = sptree
-        .l
-        .clone()
-        .into_iter()
-        .filter(|&x| x != entering_arc.unwrap())
-        .collect();
-    sptree.u = sptree
-        .u
-        .clone()
-        .into_iter()
-        .filter(|&x| x != entering_arc.unwrap())
-        .collect();
-}
-
-fn _update_sptree<NUM:CloneableNum>(graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>, sptree: &mut SPTree, entering_arc: EdgeIndex, leaving_arc: EdgeIndex){
-    let (i, j) = graph.edge_endpoints(entering_arc) .unwrap();
-    let (k, l) = graph.edge_endpoints(leaving_arc) .unwrap(); 
-    if sptree.pred[k.index()] == Some(l) {
-        sptree.pred[k.index()] = None;
-    } else {
-        sptree.pred[l.index()] = None;
-    }
-    let mut path_from_i: Vec<NodeIndex> = Vec::new();
-    let mut path_from_j: Vec<NodeIndex> = Vec::new();
-    
-    let mut current_node:Option<NodeIndex> = Some(i);
-    while !current_node.is_none() {
-        path_from_i.push(current_node.unwrap());
-        current_node = sptree.pred[current_node.unwrap().index()];
-    }
-    
-    current_node = Some(j);
-    while !current_node.is_none() {
-        path_from_j.push(current_node.unwrap());
-        current_node = sptree.pred[current_node.unwrap().index()];
-    }
-    if path_from_i[path_from_i.len()-1] != NodeIndex::new(0) {
-        sptree.pred[i.index()] = Some(j);
-        path_from_i.iter().skip(1).rev().enumerate().for_each(|(index, &x)| sptree.pred[x.index()] = Some(path_from_i[index +1]));
-    } else {
-        sptree.pred[j.index()] = Some(i);
-        path_from_j.iter().skip(1).rev().enumerate().for_each(|(index, &x)| sptree.pred[x.index()] = Some(path_from_j[index +1]));
-    }
-
-
     sptree.t.push(entering_arc);
     sptree.l.retain(|&x| x != entering_arc);
     sptree.u.retain(|&x| x != entering_arc);
 
     sptree.t.retain(|&x| x != leaving_arc);
     let at_min_capacity: bool = graph.edge_weight(leaving_arc).unwrap().flow == zero();
-
     if at_min_capacity {
         sptree.l.push(leaving_arc);
     } else {
         sptree.u.push(leaving_arc)
     }
-
 }
 
-
 fn debug_print_tlu<NUM: CloneableNum>(graph: DiGraph<u32, CustomEdgeIndices<NUM>>, tlu: SPTree) {
-    print!("\nT = ");
+    debug_print!("\nT = ");
     tlu.t.iter().for_each(|x| {
         let endspoints = graph.edge_endpoints(*x).unwrap();
-        print!("{:?}, ", (endspoints.0.index(), endspoints.1.index()))
+        debug_print!("{:?}, ", (endspoints.0.index(), endspoints.1.index()))
     });
-    print!("\nL = ");
+    debug_print!("\nL = ");
     tlu.l.iter().for_each(|x| {
         let endspoints = graph.edge_endpoints(*x).unwrap();
-        print!("{:?}, ", (endspoints.0.index(), endspoints.1.index()))
+        debug_print!("{:?}, ", (endspoints.0.index(), endspoints.1.index()))
     });
-    print!("\nU = ");
+    debug_print!("\nU = ");
     tlu.u.iter().for_each(|x| {
         let endspoints = graph.edge_endpoints(*x).unwrap();
-        print!("{:?}, ", (endspoints.0.index(), endspoints.1.index()))
+        debug_print!("{:?}, ", (endspoints.0.index(), endspoints.1.index()))
     });
-    print!("\n");
+    debug_print!("\npred = {:?}", tlu.pred);
+    debug_print!("\n");
 }
 
 fn debug_print_reduced_cost<NUM: CloneableNum>(
@@ -624,29 +577,25 @@ fn debug_print_reduced_cost<NUM: CloneableNum>(
 
 //main algorithm function
 pub fn min_cost<NUM: CloneableNum>(
-    graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
+    mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let mut min_cost_flow_graph = graph;
-    let mut tlu_solution = __initialization::<NUM>(&mut min_cost_flow_graph, demand);
+    let mut tlu_solution = __initialization::<NUM>(&mut graph, demand);
 
-    //debug_print_tlu(min_cost_flow_graph.clone(), tlu_solution.clone());
+    debug_print_tlu(graph.clone(), tlu_solution.clone());
 
-    let mut potentials = compute_node_potentials(&mut min_cost_flow_graph, &mut tlu_solution);
+    let mut potentials = compute_node_potentials(&mut graph, &mut tlu_solution);
     debug_println!("potentials = {:?}", potentials);
 
-    let mut reduced_cost =
-        compute_reduced_cost(&mut potentials, &min_cost_flow_graph, &mut tlu_solution);
-    debug_print_reduced_cost(min_cost_flow_graph.clone(), reduced_cost.clone());
+    let mut reduced_cost = compute_reduced_cost(&mut potentials, &graph, &mut tlu_solution);
+    debug_print_reduced_cost(graph.clone(), reduced_cost.clone());
 
-    let mut entering_arc = par_find_entering_arc(&mut tlu_solution, &mut reduced_cost);
+    let mut entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
     debug_println!("entering arc : {:?}", {
         if entering_arc.is_none() {
             (0, 0)
         } else {
-            let endpoints = min_cost_flow_graph
-                .edge_endpoints(entering_arc.unwrap())
-                .unwrap();
+            let endpoints = graph.edge_endpoints(entering_arc.unwrap()).unwrap();
             (endpoints.0.index(), endpoints.1.index())
         }
     });
@@ -654,26 +603,25 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut iteration = 0;
 
     while entering_arc != None {
-        println!("ITERATION {:?}", iteration);
-        let mut cycle = find_cycle_with_arc(
-            &min_cost_flow_graph,
-            &mut tlu_solution,
-            entering_arc.unwrap(),
-        );
-        par_update_sptree_with_entering(&mut tlu_solution, entering_arc);
-
-        let leaving_arc = compute_flowchange(&mut min_cost_flow_graph, &mut cycle);
-
-        par_update_sptree_with_leaving(&min_cost_flow_graph, &mut tlu_solution, leaving_arc);
+        debug_println!("ITERATION {:?}", iteration);
+        let mut cycle = find_cycle_with_arc(&graph, &mut tlu_solution, entering_arc.unwrap());
+        let leaving_arc = compute_flowchange(&mut graph, &mut cycle);
         debug_println!("leaving arc : {:?}", {
             {
-                let endpoints = min_cost_flow_graph.edge_endpoints(leaving_arc).unwrap();
+                let endpoints = graph.edge_endpoints(leaving_arc).unwrap();
                 (endpoints.0.index(), endpoints.1.index())
             }
         });
+        _update_sptree(
+            &mut graph,
+            &mut tlu_solution,
+            entering_arc.unwrap(),
+            leaving_arc,
+        );
+        debug_print_tlu(graph.clone(), tlu_solution.clone());
 
-        potentials = par_update_node_potentials(
-            &min_cost_flow_graph,
+        potentials = update_node_potentials(
+            &graph,
             potentials,
             &mut tlu_solution,
             entering_arc.unwrap(),
@@ -681,31 +629,29 @@ pub fn min_cost<NUM: CloneableNum>(
         );
         debug_println!("potentials = {:?}", potentials);
 
-        reduced_cost =
-            compute_reduced_cost(&mut potentials, &min_cost_flow_graph, &mut tlu_solution);
+        reduced_cost = compute_reduced_cost(&mut potentials, &graph, &mut tlu_solution);
 
-        debug_print_reduced_cost(min_cost_flow_graph.clone(), reduced_cost.clone());
+        debug_print_reduced_cost(graph.clone(), reduced_cost.clone());
 
-        entering_arc = par_find_entering_arc(&mut tlu_solution, &mut reduced_cost);
+        entering_arc = find_entering_arc(&mut tlu_solution, &mut reduced_cost);
 
         debug_println!("entering arc : {:?}", {
             if entering_arc.is_none() {
                 (0, 0)
             } else {
-                let endpoints = min_cost_flow_graph
-                    .edge_endpoints(entering_arc.unwrap())
-                    .unwrap();
+                let endpoints = graph.edge_endpoints(entering_arc.unwrap()).unwrap();
                 (endpoints.0.index(), endpoints.1.index())
             }
         });
 
         iteration += 1;
-        let mut cost: NUM = zero();
-        min_cost_flow_graph
-            .edge_references()
-            .for_each(|x| cost += x.weight().flow * x.weight().cost);
-        debug_println!("total cost = {:?}", cost);
     }
-    debug_println!("_test = {:?}", Dot::new(&min_cost_flow_graph));
-    min_cost_flow_graph
+    graph.remove_node(NodeIndex::new(graph.node_count() - 1));
+    debug_println!("_test = {:?}", Dot::new(&graph));
+    let mut cost: NUM = zero();
+    graph
+        .edge_references()
+        .for_each(|x| cost += x.weight().flow * x.weight().cost);
+    println!("total cost = {:?}", cost);
+    graph
 }
