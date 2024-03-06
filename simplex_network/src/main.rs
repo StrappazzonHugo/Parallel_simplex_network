@@ -75,11 +75,11 @@ fn main() {
     }
 
     let start = SystemTime::now();
-    let demand: i64 = 10;
+    let demand: i64 = 5;
     println!(
         "node nb = {:?}, demand = {:?}",
         graph.node_count(),
-        demand
+        demand * (NODE_NUMBER as i64)
     );
     let min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i64));
     match start.elapsed() {
