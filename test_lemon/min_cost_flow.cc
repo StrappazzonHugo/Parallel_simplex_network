@@ -1,69 +1,75 @@
+#include <cmath>
+#include <cstdlib>
 #include <lemon/list_graph.h>
 #include <lemon/network_simplex.h>
 #include <ostream>
+#include <random>
+#include <chrono>
 
 using namespace lemon;
 using namespace std;
+using namespace std::chrono;
+
+double randomnumber() {
+  // Making rng static ensures that it stays the same
+  // Between different invocations of the function
+  static std::default_random_engine rng;
+
+  std::uniform_real_distribution<double> dist(0.0, 1.0);
+  return dist(rng);
+}
 
 int main() {
   ListDigraph g;
 
   ListDigraph::Node n0 = g.addNode();
   ListDigraph::Node n1 = g.addNode();
-  ListDigraph::Node n2 = g.addNode();
-  ListDigraph::Node n3 = g.addNode();
-  ListDigraph::Node n4 = g.addNode();
-  ListDigraph::Node n5 = g.addNode();
 
-  ListDigraph::Arc a01 = g.addArc(n0, n1);
-  ListDigraph::Arc a02 = g.addArc(n0, n2);
-  ListDigraph::Arc a03 = g.addArc(n0, n3);
-  ListDigraph::Arc a12 = g.addArc(n1, n2);
-  ListDigraph::Arc a14 = g.addArc(n1, n4);
-  ListDigraph::Arc a32= g.addArc(n3, n2);
-  ListDigraph::Arc a34= g.addArc(n3, n4);
-  ListDigraph::Arc a25= g.addArc(n2, n5);
-  ListDigraph::Arc a45= g.addArc(n4, n5);
+  vector<ListDigraph::Node> left;
+  vector<ListDigraph::Node> right;
 
   ListDigraph::ArcMap<int> costmap(g);
-  costmap.set(a01, 1);
-  costmap.set(a02, 2);
-  costmap.set(a03, 2);
-
-  costmap.set(a12, 2);
-  costmap.set(a14, 3);
-
-  costmap.set(a32, 3);
-  costmap.set(a34, 2);
-
-  costmap.set(a25, 1);
-  costmap.set(a45, 3);
-
   ListDigraph::ArcMap<int> capamap(g);
-  capamap.set(a01, 3);
-  capamap.set(a02, 6);
-  capamap.set(a03, 5);
-                 
-  capamap.set(a12, 3);
-  capamap.set(a14, 4);
-                 
-  capamap.set(a32, 2);
-  capamap.set(a34, 5);
-                 
-  capamap.set(a25, 8);
-  capamap.set(a45, 7);
+  for (int i = 0; i < 5000; i++) {
+    ListDigraph::Node l = g.addNode();
+    left.push_back(l);
+    ListDigraph::Arc a1 = g.addArc(n0, l);
+    costmap.set(a1, 0);
+    capamap.set(a1, 100000000);
 
+    ListDigraph::Node r = g.addNode();
+    right.push_back(r);
+    ListDigraph::Arc a2 = g.addArc(r, n1);
+    costmap.set(a2, 0);
+    capamap.set(a2, 100000000);
+  }
+
+  for (int i = 0; i < left.size(); i++) {
+    int x1 = randomnumber() * 10000;
+    int y1 = randomnumber() * 10000;
+    for (int j = 0; j < right.size(); j++) {
+      int x2 = randomnumber() * 10000;
+      int y2 = randomnumber() * 10000;
+      int cost = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+      ListDigraph::Arc arc = g.addArc(left[i], right[j]);
+      costmap.set(arc, cost);
+      capamap.set(arc, 10);
+    }
+  }
 
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n5, 10);
+  ns.stSupply(n0, n1, 50000);
 
   ListDigraph::ArcMap<int> res(g);
-  ns.run(lemon::NetworkSimplex<ListDigraph>::FIRST_ELIGIBLE);
+  auto start = high_resolution_clock::now();
+  cout << "starting..." << endl;
+  ns.run(lemon::NetworkSimplex<ListDigraph>::BEST_ELIGIBLE);
+  auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
-  for (ListDigraph::ArcIt a(g); a != INVALID; ++a)
-    cout << g.id(g.source(a)) << "->"  << g.id(g.target(a)) << " : flow = " << ns.flow(a) << endl;
-  return 0;
+  auto duration = duration_cast<seconds>(stop - start);
+  cout << "time : " << duration.count() << endl;
+    return 0;
 };
