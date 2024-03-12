@@ -1,11 +1,14 @@
 use main::min_cost;
 use main::CustomEdgeIndices;
-//use petgraph::dot::Dot;
+use main::State;
+use petgraph::data::FromElements;
+use petgraph::dot::Dot;
 use petgraph::graph::*;
+use petgraph::matrix_graph::DiMatrix;
 use rand::Rng;
 use std::time::SystemTime;
 
-const NODE_NUMBER: u32 = 1000;
+const NODE_NUMBER: u32 = 300;
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -13,7 +16,7 @@ fn main() {
 
     let mut coord: Vec<(i64, i64)> = vec![(0, 0); (node_number + 1) as usize];
 
-    let mut graph = DiGraph::<u32, CustomEdgeIndices<i64>>::new();
+    let mut graph = DiMatrix::<u32, CustomEdgeIndices<i64>>::new();
 
     let source = graph.add_node(0); //source
 
@@ -30,6 +33,7 @@ fn main() {
                 cost: (0),
                 capacity: (100000000),
                 flow: (0),
+                state: State::LowerRestricted,
             },
         );
     }
@@ -50,6 +54,7 @@ fn main() {
                 cost: (0),
                 capacity: (100000000),
                 flow: (0),
+                state: State::LowerRestricted,
             },
         );
     }
@@ -68,18 +73,15 @@ fn main() {
                     cost: (cost),
                     capacity: (10),
                     flow: (0),
+                    state: State::LowerRestricted,
                 },
             );
         }
     }
 
     let start = SystemTime::now();
-    let demand: i64 = 10;
-    println!(
-        "node nb = {:?}, demand = {:?}",
-        graph.node_count(),
-        demand * (NODE_NUMBER as i64)
-    );
+    let demand: i64 = 10 ;
+    println!("node nb = {:?}, demand = {:?}", graph.node_count(), demand * (NODE_NUMBER as i64));
     let _min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i64));
     match start.elapsed() {
         Ok(elapsed) => {
@@ -89,4 +91,5 @@ fn main() {
             println!("Error: {e:?}");
         }
     }
+    //println!("{:?}", Dot::new(&_min_cost_flow));
 }
