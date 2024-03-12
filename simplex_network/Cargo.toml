@@ -1,10 +1,5 @@
-[profile.release-without-debug]
-inherits = "release"
-debug = false 
-
-[profile.release-with-debug]
-inherits = "release"
-debug = true 
+[profile.release]
+debug = true
 
 [package]
 name = "main"
