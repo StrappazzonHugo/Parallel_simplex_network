@@ -65,9 +65,9 @@ fn main() {
                     state: (1),
                 },
             );
-            let v = (rng.gen::<f32>() * NODE_NUMBER as f32) as usize;
+            /*let v = (rng.gen::<f32>() * NODE_NUMBER as f32) as usize;
             let c: i64 = (rng.gen::<f32>() * 100f32) as i64;
-            if c < 1 {
+            if c <= 1 {
                 graph.add_edge(
                     n,
                     NodeIndex::new(v),
@@ -90,7 +90,7 @@ fn main() {
                         state: (1),
                     },
                 );
-            }
+            }*/
         };
     }
 

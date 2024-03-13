@@ -227,6 +227,51 @@ fn update_node_potentials<'a, NUM: CloneableNum>(
     potential
 }
 
+fn _update_node_potentials<'a, NUM: CloneableNum>(
+    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
+    potential: Vec<NUM>,
+    sptree: &mut SPTree,
+    entering_arc: EdgeIndex,
+) -> Vec<NUM> {
+    let (k, l) = graph.edge_endpoints(entering_arc).unwrap();
+    let mut change: NUM = zero();
+    let start: NodeIndex;
+    if sptree.pred[k.index()] == Some(l) {
+        change += get_reduced_cost_edgeindex(graph, entering_arc, &potential);
+        start = k;
+    } else {
+        change -= get_reduced_cost_edgeindex(graph, entering_arc, &potential);
+        start = l;
+    }
+    let mut potentials_to_update: Vec<usize> = Vec::new();
+    let mut new_vec: Vec<usize> = vec![start.index()];
+    let mut prev_vec: Vec<usize>;
+    while new_vec != [] {
+        prev_vec = new_vec.clone();
+        potentials_to_update.append(&mut new_vec);
+        new_vec.clear();
+        prev_vec.iter().for_each(|&x| {
+            sptree
+                .pred
+                .iter()
+                .enumerate()
+                .filter(|(_, &y)| y == Some(NodeIndex::new(x)))
+                .for_each(|(index, _)| new_vec.push(index));
+        });
+    }
+    potential
+        .iter()
+        .enumerate()
+        .map(|(index, &value)| {
+            if potentials_to_update.contains(&index) {
+                value + change
+            } else {
+                value
+            }
+        })
+        .collect()
+}
+
 fn find_cycle_with_arc<'a, NUM: CloneableNum>(
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
     sptree: &mut SPTree,
@@ -281,6 +326,7 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
     path_from_j
 }
 
+/*
 //checking if the specified edge is in forward direction according to a cycle
 //needed in function compute_flowchange(...)
 fn is_forward(edgeref: (NodeIndex, NodeIndex), cycle: &mut Vec<NodeIndex>) -> bool {
@@ -296,7 +342,7 @@ fn distances_in_cycle(cycle: &mut Vec<NodeIndex>) -> Vec<(NodeIndex, NodeIndex)>
         .tuple_windows::<(NodeIndex, NodeIndex)>()
         .collect();
     tuple_altered_cycle
-}
+}*/
 
 //computing delta the amount of unit of flow we can augment through the cycle
 //returning (the leaving edge
@@ -307,31 +353,40 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
 ) -> EdgeIndex
 //Vec<(EdgeReference<'a, CustomEdgeIndices<NUM>>, NUM)>,
 {
-    let mut edge_in_cycle: Vec<EdgeIndex> = Vec::new();
+    let mut edge_in_cycle: Vec<EdgeIndex> = vec![entering_arc; cycle.len()];
+    let mut v: Vec<NUM> = vec![one(); cycle.len()];
+    let mut delta: Vec<NUM> = vec![zero(); cycle.len()];
 
-    distances_in_cycle(cycle).iter().for_each(|(u, v)| {
-        let edge = graph.find_edge(*u, *v);
-        if edge != None {
-            edge_in_cycle.push(edge.unwrap());
-        } else {
-            edge_in_cycle.push(graph.find_edge(*v, *u).unwrap());
-        }
-    });
-
+    cycle.push(cycle[0]);
+    
     if graph[entering_arc].flow != zero() {
         cycle.reverse();
     };
-
-    let delta: Vec<NUM> = edge_in_cycle
+    
+    cycle
         .iter()
-        .map(|&x| {
-            if is_forward(graph.edge_endpoints(x).unwrap(), cycle) {
-                graph[x].capacity - graph[x].flow
+        .tuple_windows::<(&NodeIndex, &NodeIndex)>()
+        .enumerate()
+        .for_each(|(index, (i, j))| {
+            let edge = graph.find_edge(*i, *j);
+            if edge.is_none() {
+                v[index] = zero::<NUM>() - one();
+                edge_in_cycle[index] = graph.find_edge(*j, *i).unwrap();
             } else {
-                graph[x].flow
+                edge_in_cycle[index] = edge.unwrap();
             }
-        })
-        .collect();
+        });
+
+    edge_in_cycle
+        .iter()
+        .enumerate()
+        .for_each(|(index, &x)| {
+            if v[index] == one() {
+                delta[index] = graph[x].capacity - graph[x].flow;
+            } else {
+                delta[index] = graph[x].flow;
+            }
+        });
     let flowchange = delta
         .iter()
         .enumerate()
@@ -339,13 +394,8 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         .unwrap();
     let farthest_blocking_edge: EdgeIndex = edge_in_cycle[flowchange.0];
     if *flowchange.1 != zero::<NUM>() {
-        edge_in_cycle.iter().for_each(|&x| {
-            let endpoints = graph.edge_endpoints(x).unwrap();
-            graph[x].flow += if is_forward(endpoints, cycle) {
-                *flowchange.1
-            } else {
-                zero::<NUM>() - *flowchange.1
-            };
+        edge_in_cycle.iter().enumerate().for_each(|(index, &x)| {
+            graph[x].flow += v[index] * *flowchange.1;
             if graph[x].flow == zero() {
                 graph[x].state = one();
             }
@@ -377,8 +427,8 @@ fn update_sptree<NUM: CloneableNum>(
         }
         let mut path_from_i: Vec<NodeIndex> = Vec::new();
         let mut path_from_j: Vec<NodeIndex> = Vec::new();
-        let (mut current_node_0, mut current_node_1) = (Some(i), Some(j));
 
+        /*let (mut current_node_0, mut current_node_1) = (Some(i), Some(j));
         rayon::join(
             || {
                 while !current_node_0.is_none() {
@@ -392,7 +442,17 @@ fn update_sptree<NUM: CloneableNum>(
                     current_node_1 = sptree.pred[current_node_1.unwrap().index()];
                 }
             },
-        );
+        );*/
+        let mut current_node: Option<NodeIndex> = Some(i);
+        while !current_node.is_none() {
+            path_from_i.push(current_node.unwrap());
+            current_node = sptree.pred[current_node.unwrap().index()];
+        }
+        current_node = Some(j);
+        while !current_node.is_none() {
+            path_from_j.push(current_node.unwrap());
+            current_node = sptree.pred[current_node.unwrap().index()];
+        }
 
         if path_from_i[path_from_i.len() - 1] != NodeIndex::new(graph.node_count() - 1) {
             sptree.pred[i.index()] = Some(j);
@@ -593,15 +653,15 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut tlu_solution = initialization::<NUM>(&mut graph, demand);
     let mut potentials = compute_node_potentials(&mut graph, &mut tlu_solution);
 
-    /*let block_size = graph.edge_count() / 17 as usize;
-    let (mut index, mut entering_arc) = _find_block_search(
+    let block_size = graph.edge_count() / 17 as usize;
+    let (mut _index, mut entering_arc) = _find_block_search(
         &mut graph,
         &tlu_solution.l,
         &tlu_solution.u,
         &mut potentials,
         0,
         block_size,
-    );*/
+    );
 
     /*let mut entering_arc = _find_best_arc(
         &mut graph,
@@ -610,11 +670,17 @@ pub fn min_cost<NUM: CloneableNum>(
         &mut potentials,
     );*/
 
-    let mut entering_arc = _find_first_arc(&mut graph, &tlu_solution.l, &tlu_solution.u, &mut potentials);
+    /*let mut entering_arc = _find_first_arc(
+        &mut graph,
+        &tlu_solution.l,
+        &tlu_solution.u,
+        &mut potentials,
+    );*/
 
     let mut _iteration = 0;
     while entering_arc != None {
         let mut cycle = find_cycle_with_arc(&graph, &mut tlu_solution, entering_arc.unwrap());
+
         let leaving_arc = compute_flowchange(&mut graph, &mut cycle, entering_arc.unwrap());
 
         update_sptree(
@@ -625,7 +691,7 @@ pub fn min_cost<NUM: CloneableNum>(
         );
 
         potentials =
-            update_node_potentials(&graph, potentials, &mut tlu_solution, entering_arc.unwrap());
+            _update_node_potentials(&graph, potentials, &mut tlu_solution, entering_arc.unwrap());
 
         /*entering_arc = _find_best_arc(
             &mut graph,
@@ -634,14 +700,19 @@ pub fn min_cost<NUM: CloneableNum>(
             &mut potentials,
         );*/
 
-        entering_arc = _find_first_arc(&mut graph, &tlu_solution.l, &tlu_solution.u, &mut potentials);
-
-        /*(index, entering_arc) = _find_block_search(
+        entering_arc = _find_first_arc(
             &mut graph,
             &tlu_solution.l,
             &tlu_solution.u,
             &mut potentials,
-            index.unwrap(),
+        );
+
+        /*(_index, entering_arc) = _find_block_search(
+            &mut graph,
+            &tlu_solution.l,
+            &tlu_solution.u,
+            &mut potentials,
+            _index.unwrap(),
             block_size,
         );*/
 

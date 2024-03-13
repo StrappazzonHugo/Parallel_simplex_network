@@ -1,12 +1,11 @@
 use main::min_cost;
 use main::CustomEdgeIndices;
-use petgraph::data::FromElements;
-use petgraph::dot::Dot;
+//use petgraph::dot::Dot;
 use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const NODE_NUMBER: u32 = 50;
+const NODE_NUMBER: u32 = 300;
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -31,6 +30,7 @@ fn main() {
                 cost: (0),
                 capacity: (100000000),
                 flow: (0),
+                state: (1),
             },
         );
     }
@@ -51,6 +51,7 @@ fn main() {
                 cost: (0),
                 capacity: (100000000),
                 flow: (0),
+                state: (1),
             },
         );
     }
@@ -69,17 +70,18 @@ fn main() {
                     cost: (cost),
                     capacity: (10),
                     flow: (0),
+                state: (1),
                 },
             );
         }
     }
 
     let start = SystemTime::now();
-    let demand: i64 = 10 * (NODE_NUMBER as i64);
+    let demand: i64 = 10;
     println!(
         "node nb = {:?}, demand = {:?}",
         graph.node_count(),
-        demand
+        demand * (NODE_NUMBER as i64)
     );
     let _min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i64));
     match start.elapsed() {
