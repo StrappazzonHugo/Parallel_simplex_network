@@ -5,9 +5,10 @@ use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const NODE_NUMBER: u32 = 1000;
+const NODE_NUMBER: u32 = 5000;
 
 fn main() {
+    //let args: Vec<String> = std::env::args().collect();
     let mut rng = rand::thread_rng();
     let node_number = NODE_NUMBER * 2;
 
@@ -86,7 +87,7 @@ fn main() {
     let _min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i32));
     match start.elapsed() {
         Ok(elapsed) => {
-            println!("time = {}", elapsed.as_secs());
+            println!("time = {:?}", (elapsed.as_millis()as f64/1000f64) as f64);
         }
         Err(e) => {
             println!("Error: {e:?}");

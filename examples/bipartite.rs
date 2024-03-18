@@ -5,15 +5,16 @@ use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const NODE_NUMBER: u32 = 300;
+const NODE_NUMBER: u32 = 1000;
 
 fn main() {
+    //let args: Vec<String> = std::env::args().collect();
     let mut rng = rand::thread_rng();
     let node_number = NODE_NUMBER * 2;
 
     let mut coord: Vec<(i64, i64)> = vec![(0, 0); (node_number + 1) as usize];
 
-    let mut graph = DiGraph::<u32, CustomEdgeIndices<i64>>::new();
+    let mut graph = DiGraph::<u32, CustomEdgeIndices<i32>>::new();
 
     let source = graph.add_node(0); //source
 
@@ -67,7 +68,7 @@ fn main() {
                 NodeIndex::new(i as usize),
                 NodeIndex::new(j as usize),
                 CustomEdgeIndices {
-                    cost: (cost),
+                    cost: (cost as i32),
                     capacity: (10),
                     flow: (0),
                 state: (1),
@@ -77,16 +78,16 @@ fn main() {
     }
 
     let start = SystemTime::now();
-    let demand: i64 = 10;
+    let demand: i32 = 10;
     println!(
         "node nb = {:?}, demand = {:?}",
         graph.node_count(),
-        demand * (NODE_NUMBER as i64)
+        demand * (NODE_NUMBER as i32)
     );
-    let _min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i64));
+    let _min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i32));
     match start.elapsed() {
         Ok(elapsed) => {
-            println!("time = {}", elapsed.as_secs());
+            println!("time = {:?}", (elapsed.as_millis()as f64/1000f64) as f64);
         }
         Err(e) => {
             println!("Error: {e:?}");

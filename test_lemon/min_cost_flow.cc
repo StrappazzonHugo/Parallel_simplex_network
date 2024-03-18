@@ -30,7 +30,7 @@ int main() {
 
   ListDigraph::ArcMap<int> costmap(g);
   ListDigraph::ArcMap<int> capamap(g);
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < 5000; i++) {
     ListDigraph::Node l = g.addNode();
     left.push_back(l);
     ListDigraph::Arc a1 = g.addArc(n0, l);
@@ -60,16 +60,16 @@ int main() {
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n1, 10000);
+  ns.stSupply(n0, n1, 50000);
 
   ListDigraph::ArcMap<int> res(g);
   auto start = high_resolution_clock::now();
   cout << "starting..." << endl;
-  ns.run(lemon::NetworkSimplex<ListDigraph>::BLOCK_SEARCH);
+  ns.run(lemon::NetworkSimplex<ListDigraph>::BEST_ELIGIBLE);
   auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
-  auto duration = duration_cast<seconds>(stop - start);
+  auto duration = duration_cast<milliseconds>(stop - start);
   cout << "time : " << duration.count() << endl;
     return 0;
 };

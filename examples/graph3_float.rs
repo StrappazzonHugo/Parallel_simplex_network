@@ -29,36 +29,36 @@ fn main() {
     let n15 = graph.add_node(15);
     let n16 = graph.add_node(16);
 
-    graph.add_edge(n0, n1, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n0, n2, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), }, );
-    graph.add_edge(n0, n3, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), }, );
-    graph.add_edge(n0, n4, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n0, n5, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
+    graph.add_edge(n0, n1, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n0, n2, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n0, n3, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n0, n4, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n0, n5, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), state: (0.)}, );
 
-    graph.add_edge(n1, n6, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n2, n6, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), }, );
-    graph.add_edge(n2, n3, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n3, n7, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
-    graph.add_edge(n3, n4, CustomEdgeIndices { cost: (2.), capacity: (2.), flow: (0.), }, );
-    graph.add_edge(n4, n9, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n5, n8, CustomEdgeIndices { cost: (2.), capacity: (7.), flow: (0.), }, );
+    graph.add_edge(n1, n6, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n2, n6, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n2, n3, CustomEdgeIndices { cost: (1.), capacity: (2.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n3, n7, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n3, n4, CustomEdgeIndices { cost: (2.), capacity: (2.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n4, n9, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n5, n8, CustomEdgeIndices { cost: (2.), capacity: (7.), flow: (0.), state: (0.)}, );
 
-    graph.add_edge(n6, n10, CustomEdgeIndices { cost: (1.), capacity: (11.), flow: (0.), }, );
-    graph.add_edge(n6, n7, CustomEdgeIndices { cost: (2.), capacity: (7.), flow: (0.), }, );
-    graph.add_edge(n7, n8, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), }, );
-    graph.add_edge(n8, n10, CustomEdgeIndices { cost: (1.), capacity: (7.), flow: (0.), }, );
-    graph.add_edge(n8, n11, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), }, );
-    graph.add_edge(n9, n11, CustomEdgeIndices { cost: (1.), capacity: (5.), flow: (0.), }, );
+    graph.add_edge(n6, n10, CustomEdgeIndices { cost: (1.), capacity: (11.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n6, n7, CustomEdgeIndices { cost: (2.), capacity: (7.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n7, n8, CustomEdgeIndices { cost: (2.), capacity: (4.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n8, n10, CustomEdgeIndices { cost: (1.), capacity: (7.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n8, n11, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n9, n11, CustomEdgeIndices { cost: (1.), capacity: (5.), flow: (0.), state: (0.)}, );
 
-    graph.add_edge(n10, n12, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n10, n14, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), }, );
-    graph.add_edge(n11, n15, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
-    graph.add_edge(n11, n13, CustomEdgeIndices { cost: (3.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n13, n15, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), }, );
+    graph.add_edge(n10, n12, CustomEdgeIndices { cost: (1.), capacity: (3.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n10, n14, CustomEdgeIndices { cost: (2.), capacity: (6.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n11, n15, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n11, n13, CustomEdgeIndices { cost: (3.), capacity: (3.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n13, n15, CustomEdgeIndices { cost: (2.), capacity: (8.), flow: (0.), state: (0.)}, );
 
-    graph.add_edge(n14, n15, CustomEdgeIndices { cost: (2.), capacity: (3.), flow: (0.), }, );
-    graph.add_edge(n14, n16, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), }, );
-    graph.add_edge(n15, n16, CustomEdgeIndices { cost: (2.), capacity: (12.), flow: (0.), }, );
+    graph.add_edge(n14, n15, CustomEdgeIndices { cost: (2.), capacity: (3.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n14, n16, CustomEdgeIndices { cost: (1.), capacity: (10.), flow: (0.), state: (0.)}, );
+    graph.add_edge(n15, n16, CustomEdgeIndices { cost: (2.), capacity: (12.), flow: (0.), state: (0.)}, );
     //println!("{:?}", Dot::new(&graph));
     let start = SystemTime::now();
     let min_cost_flow = min_cost(graph, 10.0);
