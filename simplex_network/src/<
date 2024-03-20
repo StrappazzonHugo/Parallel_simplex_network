@@ -221,23 +221,19 @@ fn update_node_potentials<'a, NUM: CloneableNum>(
         .collect();
     let g = Graph::<(), f32, Undirected>::from_edges(edges);
     let path_cost: Vec<f32> = bellman_ford(&g, start).unwrap().distances;
-    let mut rc_update: Vec<EdgeIndex> = Vec::new();
+    let mut nb_update = 0;
     path_cost.iter().enumerate().for_each(|(index, x)| {
         if x == &0. {
-            let out_edge = graph.edges_directed(NodeIndex::new(index), Outgoing);
-            let in_edge = graph.edges_directed(NodeIndex::new(index), Incoming);
-            out_edge.for_each(|x| rc_update.push(x.id()));
-            in_edge.for_each(|x| rc_update.push(x.id()));
+            print!("{:?} ", index);
             potential[index] += change
         } else {
         }
     });
-    rc_update = rc_update.into_iter().unique().collect();
-    println!("{:?}/{:?}", rc_update.len(),graph.edge_count());
+    println!("\n");
     potential
 }
 
-/*fn __update_node_potentials<'a, NUM: CloneableNum>(
+fn __update_node_potentials<'a, NUM: CloneableNum>(
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
     mut potential: Vec<NUM>,
     sptree: &mut SPTree,
@@ -278,7 +274,7 @@ fn update_node_potentials<'a, NUM: CloneableNum>(
     res.iter()
         .for_each(|(key, _)| potential[key.index()] += change);
     potential
-}*/
+}
 
 fn _update_node_potentials<'a, NUM: CloneableNum>(
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
