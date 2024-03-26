@@ -5,7 +5,7 @@ use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const GRID_SIZE: i32 = 80;
+const GRID_SIZE: i32 = 8;
 
 fn main() {
     //let args: Vec<String> = std::env::args().collect();

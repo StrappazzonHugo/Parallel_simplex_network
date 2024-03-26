@@ -1,10 +1,10 @@
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <lemon/list_graph.h>
 #include <lemon/network_simplex.h>
 #include <ostream>
 #include <random>
-#include <chrono>
 
 using namespace lemon;
 using namespace std;
@@ -25,51 +25,55 @@ int main() {
   ListDigraph::Node n0 = g.addNode();
   ListDigraph::Node n1 = g.addNode();
 
-  vector<ListDigraph::Node> left;
-  vector<ListDigraph::Node> right;
+  int grid_size = 80;
+  vector<vector<ListDigraph::Node>> nodes(grid_size, vector<ListDigraph::Node> (grid_size));
 
   ListDigraph::ArcMap<int> costmap(g);
   ListDigraph::ArcMap<int> capamap(g);
-  for (int i = 0; i < 3000; i++) {
-    ListDigraph::Node l = g.addNode();
-    left.push_back(l);
-    ListDigraph::Arc a1 = g.addArc(n0, l);
-    costmap.set(a1, 0);
-    capamap.set(a1, 100000000);
 
-    ListDigraph::Node r = g.addNode();
-    right.push_back(r);
-    ListDigraph::Arc a2 = g.addArc(r, n1);
-    costmap.set(a2, 0);
-    capamap.set(a2, 100000000);
+  for (int i = 0; i < grid_size; i++) {
+    for (int j = 0; j < grid_size; j++) {
+      ListDigraph::Node n = g.addNode();
+      nodes[i][j] = n;
+    }
   }
 
-  for (int i = 0; i < left.size(); i++) {
-    int x1 = randomnumber() * 10000;
-    int y1 = randomnumber() * 10000;
-    for (int j = 0; j < right.size(); j++) {
-      int x2 = randomnumber() * 10000;
-      int y2 = randomnumber() * 10000;
-      int cost = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
-      ListDigraph::Arc arc = g.addArc(left[i], right[j]);
-      costmap.set(arc, cost);
-      capamap.set(arc, 10);
+  for (int i = 0; i < grid_size; i++) {
+    for (int j = 0; j < grid_size; j++) {
+      if (i != grid_size - 1) {
+        ListDigraph::Arc h = g.addArc(nodes[i][j], nodes[i+1][j]);
+        costmap.set(h, randomnumber() * grid_size);
+        capamap.set(h, 10);
+      }
+      ListDigraph::Arc v = g.addArc(nodes[i][j], nodes[i][(j + 1) % grid_size]);
+      costmap.set(v, randomnumber() * grid_size);
+      capamap.set(v, 10);
     }
+  }
+
+  for (int j = 0; j< grid_size; j++) {
+    ListDigraph::Arc s = g.addArc(n0, nodes[0][j]);
+    capamap.set(s, 100000000);
+    costmap.set(s, 0);
+    ListDigraph::Arc t = g.addArc(nodes[grid_size-1][j], n1);
+    capamap.set(t, 100000000);
+    costmap.set(t, 0);
   }
 
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n1, 30000);
+  int demand = 5;
+  ns.stSupply(n0, n1, demand * grid_size);
 
   ListDigraph::ArcMap<int> res(g);
   auto start = high_resolution_clock::now();
   cout << "starting..." << endl;
-  ns.run(lemon::NetworkSimplex<ListDigraph>::BLOCK_SEARCH);
+  ns.run(lemon::NetworkSimplex<ListDigraph>::FIRST_ELIGIBLE);
   auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "time : " << duration.count() << endl;
-    return 0;
+  return 0;
 };
