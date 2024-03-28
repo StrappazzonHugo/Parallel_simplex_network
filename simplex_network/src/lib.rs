@@ -7,9 +7,6 @@ use petgraph::graph::EdgeIndex;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
-use petgraph::visit::depth_first_search;
-use petgraph::visit::Control;
-use petgraph::visit::DfsEvent;
 //use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -491,6 +488,66 @@ fn update_sptree<NUM: CloneableNum>(
             path_to_change = &path_from_j;
         }
 
+
+        // update thread_id
+        let mut parcour: Vec<NodeIndex> = vec![NodeIndex::new(graph.node_count() - 1)];
+        for i in 0..(graph.node_count() - 1) {
+            parcour.push(sptree.thread[parcour[i].index()]);
+        }
+
+        let mut current_node = sptree.thread[path_to_change.last().unwrap().index()];
+        let mut block_parcour = vec![*path_to_change.last().unwrap()];
+        while sptree.depth[current_node.index()]
+            > sptree.depth[path_to_change.last().unwrap().index()]
+        {
+            block_parcour.push(current_node);
+            current_node = sptree.thread[current_node.index()];
+        }
+        println!("depth = {:?}", sptree.depth);
+        println!("parcour = {:?}", parcour);
+        println!("block_parcour = {:?}", block_parcour);
+
+        let block_position = parcour.iter().position(|&x| x == block_parcour[0]).unwrap();
+        let (left, right) = parcour.split_at(block_position);
+        let vec_right = right.to_vec();
+        let vec_left = left.to_vec();
+        println!("left = {:?}", vec_left);
+        println!("right = {:?}", vec_right);
+        let without_block: Vec<NodeIndex> = vec_left
+            .into_iter()
+            .chain(vec_right.into_iter().skip(block_parcour.len()))
+            .collect();
+
+        let mut test: Vec<NodeIndex> = Vec::new();
+        path_to_change.iter().for_each(|&x| {
+            let mut current = sptree.thread[x.index()];
+            test.push(x);
+            while sptree.depth[current.index()] > sptree.depth[x.index()] {
+                test.push(current);
+                current = sptree.thread[current.index()];
+            }
+        });
+        println!("\nwithout_block = {:?}", without_block);
+        let index = without_block
+            .iter()
+            .position(|&x| x == path_to_root[0])
+            .unwrap();
+        test = test.into_iter().unique().collect(); 
+        let mut new_thread: Vec<NodeIndex> = without_block
+            .clone()
+            .into_iter()
+            .take(index + 1)
+            .chain(test.into_iter())
+            .chain(without_block.into_iter().skip(index + 1))
+            .collect();
+
+        new_thread.push(new_thread[0]);
+        new_thread
+            .iter()
+            .tuple_windows()
+            .for_each(|(x, &y)| sptree.thread[x.index()] = y);
+        println!("\n_thread = {:?}", new_thread);
+
         //update depth
         let mut current_node: NodeIndex = sptree.thread[path_to_change.last().unwrap().index()];
         let mut thread_from_change: Vec<NodeIndex> = vec![path_to_change[0]];
@@ -511,12 +568,13 @@ fn update_sptree<NUM: CloneableNum>(
         thread_from_change.iter().for_each(|&x| {
             sptree.depth[x.index()] = sptree.depth[sptree.pred[x.index()].unwrap().index()] + 1
         });
-
-        
     }
     sptree.in_base.push(entering_arc);
 
     /*if index.is_none() {
+     *
+                    .chain(without_block.iter().skip(index + 1)),
+
         let id_l = sptree.l.iter().position(|&x| x == entering_arc);
         let id_u = sptree.u.iter().position(|&x| x == entering_arc);
         if id_u.is_none() {
@@ -537,35 +595,6 @@ fn update_sptree<NUM: CloneableNum>(
 
     sptree.out_base.push(leaving_arc);
     //update thread_id
-    if entering_arc != leaving_arc {
-        let edges: Vec<(u32, u32, f32)> = sptree
-            .in_base
-            .iter()
-            .map(|&x| {
-                let (i, j) = (
-                    graph.raw_edges()[x.index()].source(),
-                    graph.raw_edges()[x.index()].target(),
-                );
-                (i.index() as u32, j.index() as u32, 0f32)
-            })
-            .collect();
-        let mut dfs: Vec<NodeIndex> = Vec::new();
-        let g = Graph::<(), _, Undirected>::from_edges(edges);
-        dfs.push(NodeIndex::new(g.node_count() - 1));
-        depth_first_search(&g, Some(NodeIndex::new(g.node_count() - 1)), |event| {
-            if let DfsEvent::TreeEdge(_, v) = event {
-                if v == NodeIndex::new(g.node_count() - 1) {
-                    return Control::Break(());
-                }
-                dfs.push(v);
-            }
-            Control::Continue
-        });
-        dfs.push(NodeIndex::new(g.node_count() - 1));
-        dfs.iter()
-            .tuple_windows()
-            .for_each(|(x, &y)| sptree.thread[x.index()] = y);
-    }
 }
 
 ///////////////////////
@@ -744,11 +773,18 @@ pub fn min_cost<NUM: CloneableNum>(
     //entering_arc = _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
     let mut _iteration = 0;
-    while entering_arc != None {
+    while entering_arc != None && _iteration <100  {
+        println!("ITERATION {:?}", _iteration);
+        tlu_solution.in_base.iter().for_each(|&x| print!("{:?} ", graph.edge_endpoints(x).unwrap() ));
+        println!("\nentering_arc = {:?}", entering_arc);
         let mut cycle = find_cycle_with_arc(&graph, &mut tlu_solution, entering_arc.unwrap());
 
         let leaving_arc = compute_flowchange(&mut graph, &mut cycle, entering_arc.unwrap());
-
+        println!(
+            "entering arc = {:?} \n leaving arc  = {:?}",
+            graph.edge_endpoints(entering_arc.unwrap()),
+            graph.edge_endpoints(leaving_arc)
+        );
         update_sptree(
             &mut graph,
             &mut tlu_solution,
@@ -772,7 +808,7 @@ pub fn min_cost<NUM: CloneableNum>(
             block_size,
         );*/
 
-    //entering_arc = _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
+        //entering_arc = _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
         entering_arc = _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
