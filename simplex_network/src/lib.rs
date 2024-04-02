@@ -444,6 +444,7 @@ fn update_sptree<NUM: CloneableNum>(
     leaving_arc: EdgeIndex,
 ) {
     if entering_arc != leaving_arc {
+        let node_nb = graph.node_count();
         let (i, j) = graph.edge_endpoints(entering_arc).unwrap();
         let (k, l) = graph.edge_endpoints(leaving_arc).unwrap();
         let mut path_to_change: &Vec<NodeIndex>;
@@ -466,7 +467,7 @@ fn update_sptree<NUM: CloneableNum>(
             path_from_j.push(current_node.unwrap());
             current_node = sptree.pred[current_node.unwrap().index()];
         }
-        if path_from_i[path_from_i.len() - 1] != NodeIndex::new(graph.node_count() - 1) {
+        if path_from_i[path_from_i.len() - 1] != NodeIndex::new(node_nb - 1) {
             path_to_change = &path_from_i;
             path_to_root = &path_from_j;
         } else {
@@ -475,11 +476,6 @@ fn update_sptree<NUM: CloneableNum>(
         }
 
         // update thread_id
-        let mut parcour: Vec<NodeIndex> = vec![NodeIndex::new(graph.node_count() - 1)];
-        for i in 0..(graph.node_count() - 1) {
-            parcour.push(sptree.thread[parcour[i].index()]);
-        }
-
         let mut current_node = sptree.thread[path_to_change.last().unwrap().index()];
         let mut block_parcour = vec![*path_to_change.last().unwrap()];
         while sptree.depth[current_node.index()]
@@ -489,14 +485,15 @@ fn update_sptree<NUM: CloneableNum>(
             current_node = sptree.thread[current_node.index()];
         }
 
-        let block_position = parcour.iter().position(|&x| x == block_parcour[0]).unwrap();
-        let (left, right) = parcour.split_at(block_position);
-        let vec_right = right.to_vec();
-        let vec_left = left.to_vec();
-        let without_block: Vec<NodeIndex> = vec_left
-            .into_iter()
-            .chain(vec_right.into_iter().skip(block_parcour.len()))
-            .collect();
+        let mut without_block: Vec<NodeIndex> =
+            vec![NodeIndex::new(node_nb - 1); node_nb - block_parcour.len()];
+        for i in 1..without_block.len() {
+            if sptree.thread[without_block[i - 1].index()] == block_parcour[0] {
+                without_block[i] = sptree.thread[block_parcour.last().unwrap().index()];
+            } else {
+                without_block[i] = sptree.thread[without_block[i - 1].index()];
+            }
+        }
 
         let mut test: Vec<NodeIndex> = Vec::new();
         path_to_change.iter().for_each(|&x| {
@@ -528,7 +525,7 @@ fn update_sptree<NUM: CloneableNum>(
 
         //Predecessors update
 
-        if path_from_i[path_from_i.len() - 1] != NodeIndex::new(graph.node_count() - 1) {
+        if path_from_i[path_from_i.len() - 1] != NodeIndex::new(node_nb - 1) {
             sptree.pred[i.index()] = Some(j);
             path_from_i
                 .iter()
@@ -791,9 +788,9 @@ pub fn min_cost<NUM: CloneableNum>(
             block_size,
         );*/
 
-        entering_arc = _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
+        //entering_arc = _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
-        //entering_arc = _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
+        entering_arc = _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
         _iteration += 1;
     }
