@@ -38,6 +38,7 @@ fn main() {
             vertical_node[(n + 1) % vertical_node.len()],
             CustomEdgeIndices {
                 cost: ((rng.gen::<f32>() * GRID_SIZE as f32) as i32),
+                //cost: (40),
                 capacity: (10),
                 flow: (0),
                 state: (0),
@@ -56,6 +57,7 @@ fn main() {
                 n,
                 CustomEdgeIndices {
                     cost: ((rng.gen::<f32>() * GRID_SIZE as f32) as i32),
+                    //cost: (40),
                     capacity: (10),
                     flow: (0),
                     state: (0),
@@ -68,6 +70,7 @@ fn main() {
                 vertical_node[(n + 1) % vertical_node.len()],
                 CustomEdgeIndices {
                     cost: ((rng.gen::<f32>() * GRID_SIZE as f32) as i32),
+                    //cost: (40),
                     capacity: (10),
                     flow: (0),
                     state: (0),

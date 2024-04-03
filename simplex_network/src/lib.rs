@@ -471,8 +471,8 @@ fn update_sptree<NUM: CloneableNum>(
             path_to_change = &path_from_i;
             path_to_root = &path_from_j;
         } else {
-            path_to_root = &path_from_i;
             path_to_change = &path_from_j;
+            path_to_root = &path_from_i;
         }
 
         // update thread_id
@@ -485,43 +485,40 @@ fn update_sptree<NUM: CloneableNum>(
             current_node = sptree.thread[current_node.index()];
         }
 
-        let mut without_block: Vec<NodeIndex> =
-            vec![NodeIndex::new(node_nb - 1); node_nb - block_parcour.len()];
-        for i in 1..without_block.len() {
-            if sptree.thread[without_block[i - 1].index()] == block_parcour[0] {
-                without_block[i] = sptree.thread[block_parcour.last().unwrap().index()];
-            } else {
-                without_block[i] = sptree.thread[without_block[i - 1].index()];
-            }
-        }
-
-        let mut test: Vec<NodeIndex> = Vec::new();
-        path_to_change.iter().for_each(|&x| {
-            let mut current = sptree.thread[x.index()];
-            test.push(x);
-            while sptree.depth[current.index()] > sptree.depth[x.index()] {
-                test.push(current);
-                current = sptree.thread[current.index()];
-            }
-        });
-        let index = without_block
+        let nodeid_to_block = sptree
+            .thread
             .iter()
-            .position(|&x| x == path_to_root[0])
+            .position(|&x| x == block_parcour[0])
             .unwrap();
-        test = test.into_iter().unique().collect();
-        let mut new_thread: Vec<NodeIndex> = without_block
-            .clone()
-            .into_iter()
-            .take(index + 1)
-            .chain(test.into_iter())
-            .chain(without_block.into_iter().skip(index + 1))
-            .collect();
+        sptree.thread[nodeid_to_block] = sptree.thread[block_parcour.last().unwrap().index()];
 
-        new_thread.push(new_thread[0]);
-        new_thread
+        path_to_change
             .iter()
-            .tuple_windows()
-            .for_each(|(x, &y)| sptree.thread[x.index()] = y);
+            .take(path_to_change.len() - 1)
+            .for_each(|&x| {
+                let mut current = sptree.thread[x.index()];
+                let mut old_last = x;
+                while sptree.depth[current.index()] > sptree.depth[x.index()] {
+                    old_last = current;
+                    current = sptree.thread[current.index()];
+                }
+                let mut id = block_parcour.iter().position(|&y| y == x).unwrap();
+                id = block_parcour[id-1].index();
+                sptree.thread[id] = current;
+                sptree.thread[old_last.index()] = sptree.pred[x.index()].unwrap();
+            });
+        let mut current = sptree.thread[path_to_change.last().unwrap().index()];
+        let mut old = *path_to_change.last().unwrap();
+        while sptree.depth[current.index()] > sptree.depth[path_to_change.last().unwrap().index()] {
+            old = current;
+            current = sptree.thread[current.index()];
+        }
+        //println!("test = {:?}", old.index());
+        sptree.thread[old.index()] = sptree.thread[path_to_root[0].index()];
+        sptree.thread[path_to_root[0].index()] = path_to_change[0];
+        /*println!("{:?}", sptree.thread);
+        let test_eq: Vec<NodeIndex> = sptree.thread.clone().into_iter().unique().collect();
+        assert_eq!(sptree.thread, test_eq);*/
 
         //Predecessors update
 
@@ -607,7 +604,7 @@ fn _find_best_arc<NUM: CloneableNum>(
     out_base: &Vec<EdgeIndex>,
     potential: &Vec<NUM>,
 ) -> Option<EdgeIndex> {
-    let min_arc: Option<&EdgeIndex> = out_base.par_iter().min_by(|&x, &y| {
+    let min_arc: Option<&EdgeIndex> = out_base.iter().min_by(|&x, &y| {
         (graph[*x].state * get_reduced_cost_edgeindex(graph, *x, potential))
             .partial_cmp(&(graph[*y].state * get_reduced_cost_edgeindex(graph, *y, potential)))
             .unwrap()
@@ -745,7 +742,7 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut tlu_solution = initialization::<NUM>(&mut graph, demand);
     let mut potentials = compute_node_potentials(&mut graph, &mut tlu_solution);
 
-    let block_size = (graph.edge_count() / 10) as usize;
+    let block_size = (graph.edge_count() / 15) as usize;
     let mut _index: Option<usize> = None;
     let mut entering_arc: Option<EdgeIndex>;
 
@@ -764,7 +761,8 @@ pub fn min_cost<NUM: CloneableNum>(
         let mut cycle = find_cycle_with_arc(&graph, &mut tlu_solution, entering_arc.unwrap());
 
         let leaving_arc = compute_flowchange(&mut graph, &mut cycle, entering_arc.unwrap());
-
+        /*println!("enter {:?}", graph.edge_endpoints(entering_arc.unwrap()));
+        println!("leave {:?}", graph.edge_endpoints(leaving_arc));*/
         update_sptree(
             &mut graph,
             &mut tlu_solution,
@@ -780,17 +778,17 @@ pub fn min_cost<NUM: CloneableNum>(
             leaving_arc,
         );
 
-        /*(_index, entering_arc) = _find_block_search(
+        (_index, entering_arc) = _find_block_search(
             &mut graph,
             &tlu_solution.out_base,
             &mut potentials,
             _index,
             block_size,
-        );*/
+        );
 
         //entering_arc = _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
-        entering_arc = _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
+        //entering_arc = _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
         _iteration += 1;
     }

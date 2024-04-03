@@ -43,10 +43,12 @@ int main() {
       if (i != grid_size - 1) {
         ListDigraph::Arc h = g.addArc(nodes[i][j], nodes[i+1][j]);
         costmap.set(h, randomnumber() * grid_size);
+        //costmap.set(h, 40);
         capamap.set(h, 10);
       }
       ListDigraph::Arc v = g.addArc(nodes[i][j], nodes[i][(j + 1) % grid_size]);
       costmap.set(v, randomnumber() * grid_size);
+      //costmap.set(v, 40);
       capamap.set(v, 10);
     }
   }
@@ -69,7 +71,7 @@ int main() {
   ListDigraph::ArcMap<int> res(g);
   auto start = high_resolution_clock::now();
   cout << "starting..." << endl;
-  ns.run(lemon::NetworkSimplex<ListDigraph>::FIRST_ELIGIBLE);
+  ns.run(lemon::NetworkSimplex<ListDigraph>::BLOCK_SEARCH);
   auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
