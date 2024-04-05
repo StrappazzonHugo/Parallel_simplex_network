@@ -513,12 +513,8 @@ fn update_sptree<NUM: CloneableNum>(
             old = current;
             current = sptree.thread[current.index()];
         }
-        //println!("test = {:?}", old.index());
         sptree.thread[old.index()] = sptree.thread[path_to_root[0].index()];
         sptree.thread[path_to_root[0].index()] = path_to_change[0];
-        /*println!("{:?}", sptree.thread);
-        let test_eq: Vec<NodeIndex> = sptree.thread.clone().into_iter().unique().collect();
-        assert_eq!(sptree.thread, test_eq);*/
 
         //Predecessors update
 
@@ -792,7 +788,7 @@ pub fn min_cost<NUM: CloneableNum>(
 
         _iteration += 1;
     }
-    println!("ITERATION {:?}", _iteration);
+    println!("iterations : {:?}", _iteration);
     let mut cost: NUM = zero();
     graph
         .edge_references()

@@ -30,7 +30,7 @@ int main() {
 
   ListDigraph::ArcMap<int> costmap(g);
   ListDigraph::ArcMap<int> capamap(g);
-  for (int i = 0; i < 3000; i++) {
+  for (int i = 0; i < 5000; i++) {
     ListDigraph::Node l = g.addNode();
     left.push_back(l);
     ListDigraph::Arc a1 = g.addArc(n0, l);

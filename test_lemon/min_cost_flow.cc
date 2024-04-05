@@ -25,7 +25,7 @@ int main() {
   ListDigraph::Node n0 = g.addNode();
   ListDigraph::Node n1 = g.addNode();
 
-  int grid_size = 80;
+  int grid_size = 150;
   vector<vector<ListDigraph::Node>> nodes(grid_size, vector<ListDigraph::Node> (grid_size));
 
   ListDigraph::ArcMap<int> costmap(g);
