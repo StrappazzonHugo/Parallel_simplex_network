@@ -325,33 +325,27 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
     entering_arc: EdgeIndex,
 ) -> Vec<NodeIndex> {
     let (i, j) = graph.edge_endpoints(entering_arc).unwrap();
-    let mut path_from_i: Vec<NodeIndex> = Vec::new();
-    let mut path_from_j: Vec<NodeIndex> = Vec::new();
+    let mut path_from_i: Vec<NodeIndex> = vec![i];
+    let mut path_from_j: Vec<NodeIndex> = vec![j];
 
-    let mut current_node: Option<NodeIndex> = Some(i);
-    while !current_node.is_none() {
-        path_from_i.push(current_node.unwrap());
-        current_node = sptree.pred[current_node.unwrap().index()];
-    }
-    let mut current_node = Some(j);
-    while !current_node.is_none() {
-        path_from_j.push(current_node.unwrap());
-        current_node = sptree.pred[current_node.unwrap().index()];
-    }
+    let mut current_node_i: NodeIndex = i;
+    let mut current_node_j: NodeIndex = j;
 
-    for (i, i_node) in path_from_i.iter().enumerate() {
-        if path_from_j.contains(i_node) {
-            let j = path_from_j
-                .iter()
-                .find_position(|&x| x == i_node)
-                .unwrap()
-                .0;
-            path_from_j.truncate(j + 1);
-            path_from_i.truncate(i);
-            path_from_i.iter().rev().for_each(|&x| path_from_j.push(x));
-            break;
+    while current_node_j != current_node_i {
+        if sptree.depth[current_node_i.index()] < sptree.depth[current_node_j.index()] {
+            current_node_j = sptree.pred[current_node_j.index()].unwrap();
+            path_from_j.push(current_node_j);
+        } else {
+            current_node_i = sptree.pred[current_node_i.index()].unwrap();
+            path_from_i.push(current_node_i);
         }
     }
+
+    path_from_i
+        .iter()
+        .rev()
+        .skip(1)
+        .for_each(|&x| path_from_j.push(x));
     path_from_j
 }
 
@@ -503,10 +497,11 @@ fn update_sptree<NUM: CloneableNum>(
                     current = sptree.thread[current.index()];
                 }
                 let mut id = block_parcour.iter().position(|&y| y == x).unwrap();
-                id = block_parcour[id-1].index();
+                id = block_parcour[id - 1].index();
                 sptree.thread[id] = current;
                 sptree.thread[old_last.index()] = sptree.pred[x.index()].unwrap();
             });
+
         let mut current = sptree.thread[path_to_change.last().unwrap().index()];
         let mut old = *path_to_change.last().unwrap();
         while sptree.depth[current.index()] > sptree.depth[path_to_change.last().unwrap().index()] {
@@ -544,9 +539,7 @@ fn update_sptree<NUM: CloneableNum>(
             sptree.depth[x.index()] = sptree.depth[sptree.pred[x.index()].unwrap().index()] + 1
         });
         block_parcour.iter().for_each(|&x| {
-            if !path_to_change.contains(&x) {
-                sptree.depth[x.index()] = sptree.depth[sptree.pred[x.index()].unwrap().index()] + 1
-            }
+            sptree.depth[x.index()] = sptree.depth[sptree.pred[x.index()].unwrap().index()] + 1
         });
     }
     sptree.in_base.push(entering_arc);
