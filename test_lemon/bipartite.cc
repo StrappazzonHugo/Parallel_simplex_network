@@ -60,7 +60,7 @@ int main() {
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n1, 30000);
+  ns.stSupply(n0, n1, 50000);
 
   ListDigraph::ArcMap<int> res(g);
   auto start = high_resolution_clock::now();

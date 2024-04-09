@@ -25,11 +25,14 @@ int main() {
   ListDigraph::Node n0 = g.addNode();
   ListDigraph::Node n1 = g.addNode();
 
-  int grid_size = 180;
-  vector<vector<ListDigraph::Node>> nodes(grid_size, vector<ListDigraph::Node> (grid_size));
+  int grid_size = 150;
+  vector<vector<ListDigraph::Node>> nodes(grid_size,
+                                          vector<ListDigraph::Node>(grid_size));
 
   ListDigraph::ArcMap<int> costmap(g);
   ListDigraph::ArcMap<int> capamap(g);
+
+  vector<float> verif;
 
   for (int i = 0; i < grid_size; i++) {
     for (int j = 0; j < grid_size; j++) {
@@ -41,23 +44,27 @@ int main() {
   for (int i = 0; i < grid_size; i++) {
     for (int j = 0; j < grid_size; j++) {
       if (i != grid_size - 1) {
-        ListDigraph::Arc h = g.addArc(nodes[i][j], nodes[i+1][j]);
-        costmap.set(h, randomnumber() * grid_size);
-        //costmap.set(h, 40);
+        ListDigraph::Arc h = g.addArc(nodes[i][j], nodes[i + 1][j]);
+        float cost = randomnumber() * grid_size;
+        verif.push_back(cost);
+        costmap.set(h, cost);
+        // costmap.set(h, 40);
         capamap.set(h, 10);
       }
       ListDigraph::Arc v = g.addArc(nodes[i][j], nodes[i][(j + 1) % grid_size]);
-      costmap.set(v, randomnumber() * grid_size);
-      //costmap.set(v, 40);
+      float cost = randomnumber() * grid_size;
+      verif.push_back(cost);
+      costmap.set(v, cost);
+      // costmap.set(v, 40);
       capamap.set(v, 10);
     }
   }
 
-  for (int j = 0; j< grid_size; j++) {
+  for (int j = 0; j < grid_size; j++) {
     ListDigraph::Arc s = g.addArc(n0, nodes[0][j]);
     capamap.set(s, 100000000);
     costmap.set(s, 0);
-    ListDigraph::Arc t = g.addArc(nodes[grid_size-1][j], n1);
+    ListDigraph::Arc t = g.addArc(nodes[grid_size - 1][j], n1);
     capamap.set(t, 100000000);
     costmap.set(t, 0);
   }
@@ -71,11 +78,12 @@ int main() {
   ListDigraph::ArcMap<int> res(g);
   auto start = high_resolution_clock::now();
   cout << "starting..." << endl;
-  ns.run(lemon::NetworkSimplex<ListDigraph>::BLOCK_SEARCH);
+
+  ns.run(lemon::NetworkSimplex<ListDigraph>::BEST_ELIGIBLE);
   auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
   auto duration = duration_cast<milliseconds>(stop - start);
-  cout << "time : " << duration.count() << endl;
+  cout << "time : " << duration.count() / 1000. << endl;
   return 0;
 };
