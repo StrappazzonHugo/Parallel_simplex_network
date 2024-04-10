@@ -49,7 +49,6 @@ impl CloneableNum for i32 {}
 impl CloneableNum for i64 {}
 impl CloneableNum for i128 {}
 impl CloneableNum for isize {}
-
 impl CloneableNum for f32 {}
 impl CloneableNum for f64 {}
 
@@ -196,57 +195,7 @@ fn compute_node_potentials<'a, NUM: CloneableNum>(
     pi
 }
 
-//Updating potential inspired by : NETWORK FLOWS Theory, Algorithms, and Applications (p.19)
-//modified such that the difference from T1 and T2 is done with a BellmanFord algorithm
-//detecting the single edge cost put to 1 that divide T1 and T2 in T
-/*fn update_node_potentials<'a, NUM: CloneableNum>(
-    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
-    mut potential: Vec<NUM>,
-    sptree: &mut SPTree,
-    entering_arc: EdgeIndex,
-    leaving_arc: EdgeIndex,
-) -> Vec<NUM> {
-    if entering_arc == leaving_arc {
-        return potential;
-    }
-    let (k, l) = (
-        graph.raw_edges()[entering_arc.index()].source(),
-        graph.raw_edges()[entering_arc.index()].target(),
-    );
-    let mut change: NUM = zero();
-    let start: NodeIndex;
-    if sptree.pred[k.index()] == Some(l) {
-        change += get_reduced_cost_edgeindex(graph, entering_arc, &potential);
-        start = k;
-    } else {
-        change -= get_reduced_cost_edgeindex(graph, entering_arc, &potential);
-        start = l;
-    }
-
-    let edges: Vec<(u32, u32, f32)> = sptree
-        .in_base
-        .iter()
-        .filter(|&&x| x != entering_arc)
-        .map(|&x| {
-            let (i, j) = (
-                graph.raw_edges()[x.index()].source(),
-                graph.raw_edges()[x.index()].target(),
-            );
-            (i.index() as u32, j.index() as u32, 0f32)
-        })
-        .collect();
-    let g = Graph::<(), f32, Undirected>::from_edges(edges);
-    let path_cost: Vec<f32> = bellman_ford(&g, start).unwrap().distances;
-    path_cost.iter().enumerate().for_each(|(index, x)| {
-        if x == &0. {
-            potential[index] += change
-        } else {
-        }
-    });
-    potential
-}*/
-
-fn __update_node_potentials<'a, NUM: CloneableNum>(
+fn update_node_potentials<'a, NUM: CloneableNum>(
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
     mut potential: Vec<NUM>,
     sptree: &mut SPTree,
@@ -275,51 +224,6 @@ fn __update_node_potentials<'a, NUM: CloneableNum>(
         potential[current_node.index()] += change;
         current_node = sptree.thread[current_node.index()];
     }
-    potential
-}
-
-fn _update_node_potentials<'a, NUM: CloneableNum>(
-    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
-    mut potential: Vec<NUM>,
-    sptree: &mut SPTree,
-    entering_arc: EdgeIndex,
-    leaving_arc: EdgeIndex,
-) -> Vec<NUM> {
-    if entering_arc == leaving_arc {
-        return potential;
-    }
-    let (k, l) = (
-        graph.raw_edges()[entering_arc.index()].source(),
-        graph.raw_edges()[entering_arc.index()].target(),
-    );
-    let mut change: NUM = zero();
-    let start: NodeIndex;
-    if sptree.pred[k.index()] == Some(l) {
-        change += get_reduced_cost_edgeindex(graph, entering_arc, &potential);
-        start = k;
-    } else {
-        change -= get_reduced_cost_edgeindex(graph, entering_arc, &potential);
-        start = l;
-    }
-    let mut potentials_to_update: Vec<usize> = Vec::new();
-    let mut new_vec: Vec<usize> = vec![start.index()];
-    let mut prev_vec: Vec<usize>;
-    while new_vec != [] {
-        prev_vec = new_vec.clone();
-        potentials_to_update.append(&mut new_vec);
-        new_vec.clear();
-        prev_vec.iter().for_each(|&x| {
-            sptree
-                .pred
-                .iter()
-                .enumerate()
-                .filter(|(_, &y)| y == Some(NodeIndex::new(x)))
-                .for_each(|(index, _)| new_vec.push(index));
-        });
-    }
-    potentials_to_update
-        .iter()
-        .for_each(|&x| potential[x] += change);
     potential
 }
 
@@ -352,24 +256,6 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
         .for_each(|&x| path_from_j.push(x));
     path_from_j
 }
-
-/*
-//checking if the specified edge is in forward direction according to a cycle
-//needed in function compute_flowchange(...)
-fn is_forward(edgeref: (NodeIndex, NodeIndex), cycle: &mut Vec<NodeIndex>) -> bool {
-    distances_in_cycle(cycle).contains(&edgeref)
-}
-
-//decompose cycle in tuple_altered_cycle variable ordered in distance to the entering arc
-fn distances_in_cycle(cycle: &mut Vec<NodeIndex>) -> Vec<(NodeIndex, NodeIndex)> {
-    let mut altered_cycle = cycle.clone();
-    altered_cycle.push(*cycle.first().unwrap());
-    let tuple_altered_cycle: Vec<(NodeIndex, NodeIndex)> = altered_cycle
-        .into_iter()
-        .tuple_windows::<(NodeIndex, NodeIndex)>()
-        .collect();
-    tuple_altered_cycle
-}*/
 
 //computing delta the amount of unit of flow we can augment through the cycle
 //returning (the leaving edge
@@ -735,13 +621,6 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut entering_arc: Option<EdgeIndex>;
 
     //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
-    /*(_index, entering_arc) = _find_block_search(
-        &mut graph,
-        &tlu_solution.out_base,
-        &mut potentials,
-        Some(0),
-        block_size,
-    );*/
     (_index, entering_arc) =
         _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials, _index);
 
@@ -762,7 +641,7 @@ pub fn min_cost<NUM: CloneableNum>(
             _index,
         );
 
-        potentials = __update_node_potentials(
+        potentials = update_node_potentials(
             &graph,
             potentials,
             &mut tlu_solution,
@@ -779,11 +658,11 @@ pub fn min_cost<NUM: CloneableNum>(
         );*/
 
         (_index, entering_arc) =
-        _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
+            _find_best_arc(&mut graph, &tlu_solution.out_base, &mut potentials);
 
         /*(_index, entering_arc) =
             _find_first_arc(&mut graph, &tlu_solution.out_base, &mut potentials, _index);
-*/
+        */
         _iteration += 1;
     }
     println!("iterations : {:?}", _iteration);
