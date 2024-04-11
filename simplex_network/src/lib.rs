@@ -275,9 +275,7 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
     nodes: &mut Nodes<NUM>,
     entering_arc: usize,
 ) -> Vec<usize> {
-    println!("entering_arc = {:?}", entering_arc);
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
-    println!("(i, j) = {:?}, {:?}", i, j);
     let mut path_from_i: Vec<usize> = vec![i];
     let mut path_from_j: Vec<usize> = vec![j];
 
@@ -293,9 +291,6 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
             path_from_i.push(current_node_i);
         }
     }
-    println!("path_i = {:?}", path_from_i);
-    println!("path_j = {:?}", path_from_j);
-
     path_from_i
         .iter()
         .rev()
@@ -308,13 +303,10 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
 //returning (the leaving edge
 fn compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
-    nodes: &mut Nodes<NUM>,
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
     cycle: &mut Vec<usize>,
     entering_arc: usize,
-) -> usize
-//Vec<(EdgeReference<'a, CustomEdgeIndices<NUM>>, NUM)>,
-{
+) -> usize {
     let mut edge_in_cycle: Vec<usize> = vec![entering_arc; cycle.len()];
     let mut direction: Vec<NUM> = vec![one(); cycle.len()];
     let mut delta: Vec<NUM> = vec![zero(); cycle.len()];
@@ -324,7 +316,6 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
     if edges.flow[entering_arc] != zero() {
         cycle.reverse();
     };
-    println!("cycle = {:?}", cycle);
 
     cycle
         .iter()
@@ -355,8 +346,6 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         .enumerate()
         .min_by(|x, y| x.1.partial_cmp(y.1).unwrap())
         .unwrap();
-    println!("delta = {:?}", delta);
-    println!("edgeincycle = {:?}", edge_in_cycle);
     let farthest_blocking_edge: usize = edge_in_cycle[flowchange.0];
     if *flowchange.1 != zero::<NUM>() {
         edge_in_cycle.iter().enumerate().for_each(|(index, &x)| {
@@ -492,7 +481,6 @@ fn update_sptree<NUM: CloneableNum>(
         nodes.depth[x.index()] = nodes.depth[nodes.predecessor[x.index()].unwrap().index()] + 1
     });
 
-    //can probably be faster with pointer manipulation
     edges.out_base[position.unwrap()] = leaving_arc;
 }
 
@@ -522,12 +510,13 @@ fn _find_best_arc<NUM: CloneableNum>(
     let mut index = None;
     for i in 0..edges.out_base.len() {
         let arc = edges.out_base[i];
-        let rc = edges.state[i] * get_reduced_cost_edgeindex(edges, nodes, arc);
+        let rc = edges.state[arc]
+            * (edges.cost[arc] - nodes.potential[edges.source[arc]]
+                + nodes.potential[edges.target[arc]]);
         if rc < min {
             min = rc;
             entering_arc = Some(arc);
             index = Some(i);
-            println!("rc = {:?}", rc);
         }
     }
     (index, entering_arc)
@@ -542,19 +531,17 @@ fn _find_first_arc<NUM: CloneableNum>(
     if index.is_none() {
         index = Some(0);
     }
-    for i in index.unwrap()..edges.out_base.len() {
+    for i in index.unwrap() + 1..edges.out_base.len() {
         let arc = edges.out_base[i];
-        let rc = edges.state[i] * get_reduced_cost_edgeindex(edges, nodes, arc);
+        let rc = edges.state[arc] * get_reduced_cost_edgeindex(edges, nodes, arc);
         if rc < zero() {
-            println!("rc = {:?}", rc);
             return (Some(i), Some(arc));
         }
     }
-    for i in 0..index.unwrap() {
+    for i in 0..index.unwrap() + 1 {
         let arc = edges.out_base[i];
-        let rc = edges.state[i] * get_reduced_cost_edgeindex(edges, nodes, arc);
+        let rc = edges.state[arc] * get_reduced_cost_edgeindex(edges, nodes, arc);
         if rc < zero() {
-            println!("rc = {:?}", rc);
             return (Some(i), Some(arc));
         }
     }
@@ -617,44 +604,38 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    println!("pred = {:?}", nodes.predecessor);
     //let block_size = (graph.edge_count() / 15) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
 
-    //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
-    (_index, entering_arc) = _find_first_arc(&edges, &nodes, Some(0));
-    let mut _iteration = 0;
-    while !entering_arc.is_none() && _iteration < 10 {
-        //println!("rc = {:?}", edges.state[entering_arc.unwrap()] * get_reduced_cost_edgeindex(&edges, &nodes, entering_arc.unwrap()));
-
-        println!("\nITERATION {:?}", _iteration);
-        println!("out_base : {:?}", edges.out_base);
-        println!("flow : {:?}", edges.flow);
-        println!("capa : {:?}", edges.capacity);
-        println!("state : {:?}", edges.state);
-
-        println!("potential : {:?}", nodes.potential);
-
+    for i in 0..edges.out_base.len() {
+        entering_arc = Some(edges.out_base[i]);
+        if (edges.state[i] * get_reduced_cost_edgeindex(&edges, &nodes, entering_arc.unwrap()))
+            >= zero()
+        {
+            continue;
+        }
         let mut cycle = find_cycle_with_arc(&edges, &mut nodes, entering_arc.unwrap());
-        let leaving_arc = compute_flowchange(
+        let leaving_arc =
+            compute_flowchange(&mut edges, &mut graph, &mut cycle, entering_arc.unwrap());
+        update_sptree(
             &mut edges,
             &mut nodes,
-            &mut graph,
-            &mut cycle,
             entering_arc.unwrap(),
+            leaving_arc,
+            _index,
         );
-        println!(
-            "entering arc = {:?} : ({:?}, {:?})", entering_arc.unwrap(),
-            edges.source[entering_arc.unwrap()],
-            edges.target[entering_arc.unwrap()]
-        );
-        println!(
-            "leaving arc = {:?} : ({:?}, {:?})", leaving_arc,
-            edges.source[leaving_arc],
-            edges.target[leaving_arc]
-        );
-        println!("flow = {:?}", edges.flow[leaving_arc]);
+        update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
+    }
+
+    (_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
+    //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
+    //(_index, entering_arc) = _find_first_arc(&edges, &nodes, Some(0));
+    let mut _iteration = 0;
+    while !entering_arc.is_none() {
+        let mut cycle = find_cycle_with_arc(&edges, &mut nodes, entering_arc.unwrap());
+        let leaving_arc =
+            compute_flowchange(&mut edges, &mut graph, &mut cycle, entering_arc.unwrap());
 
         update_sptree(
             &mut edges,
@@ -674,9 +655,9 @@ pub fn min_cost<NUM: CloneableNum>(
             block_size,
         );*/
 
-        (_index, entering_arc) = _find_best_arc(&edges, &mut nodes);
+        //(_index, entering_arc) = _find_best_arc(&edges, &mut nodes);
 
-        //(_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
+        (_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
 
         _iteration += 1;
     }
