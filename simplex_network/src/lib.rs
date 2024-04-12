@@ -12,7 +12,6 @@ use petgraph::stable_graph::IndexType;
 #[derive(Debug, Clone)]
 struct Edges<NUM: CloneableNum> {
     out_base: Vec<usize>,
-    //id: Vec<i32>,
     source: Vec<usize>,
     target: Vec<usize>,
     flow: Vec<NUM>,
@@ -23,7 +22,6 @@ struct Edges<NUM: CloneableNum> {
 
 #[derive(Debug, Clone)]
 struct Nodes<NUM: CloneableNum> {
-    //id: Vec<i32>,
     potential: Vec<NUM>,
     thread: Vec<usize>,
     revthread: Vec<usize>,
@@ -217,11 +215,9 @@ fn compute_node_potentials<'a, NUM: CloneableNum>(
     let path = bellman_ford(&temp_graph, NodeIndex::new(graph.node_count() - 1)).unwrap();
     let distances: Vec<i32> = path.distances.iter().map(|x| x.round() as i32).collect();
 
-    //decompose Path type from petgraph into vector
     let dist_pred: Vec<(&i32, &Option<NodeIndex>)> =
         distances.iter().zip(path.predecessors.iter()).collect();
 
-    //vector of the form : Vec<(NodeIndex, DistanceToRoot, predecessorIndex)>
     let mut id_dist_pred: Vec<(usize, &i32, &Option<NodeIndex>)> = dist_pred
         .iter()
         .enumerate()
@@ -299,8 +295,8 @@ fn find_cycle_with_arc<'a, NUM: CloneableNum>(
     path_from_j
 }
 
-//computing delta the amount of unit of flow we can augment through the cycle
-//returning (the leaving edge
+//computing delta the amount of flow we can augment through the cycle
+//returning the leaving edge
 fn compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
     graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
@@ -322,7 +318,7 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         .tuple_windows::<(&usize, &usize)>()
         .enumerate()
         .for_each(|(index, (i, j))| {
-            let edge = graph.find_edge(NodeIndex::new(*i), NodeIndex::new(*j));
+            let edge = graph.find_edge(NodeIndex::new(*i), NodeIndex::new(*j)); // TODO change this
             if edge.is_none() {
                 direction[index] = zero::<NUM>() - one();
                 edge_in_cycle[index] = graph
@@ -347,6 +343,8 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         .min_by(|x, y| x.1.partial_cmp(y.1).unwrap())
         .unwrap();
     let farthest_blocking_edge: usize = edge_in_cycle[flowchange.0];
+
+    //flow update if needed
     if *flowchange.1 != zero::<NUM>() {
         edge_in_cycle.iter().enumerate().for_each(|(index, &x)| {
             edges.flow[x] += direction[index] * *flowchange.1;
@@ -372,10 +370,10 @@ fn update_sptree<NUM: CloneableNum>(
     leaving_arc: usize,
     position: Option<usize>,
 ) {
-    //if entering_arc != leaving_arc {
     if entering_arc == leaving_arc {
         return;
     }
+    //useful structure init
     let node_nb = nodes.potential.len();
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
     let (k, l) = (edges.source[leaving_arc], edges.target[leaving_arc]);
@@ -533,45 +531,51 @@ fn _find_first_arc<NUM: CloneableNum>(
     }
     for i in index.unwrap() + 1..edges.out_base.len() {
         let arc = edges.out_base[i];
-        let rc = edges.state[arc] * get_reduced_cost_edgeindex(edges, nodes, arc);
+        let rc = edges.state[arc]
+            * (edges.cost[arc] - nodes.potential[edges.source[arc]]
+                + nodes.potential[edges.target[arc]]);
         if rc < zero() {
             return (Some(i), Some(arc));
         }
     }
     for i in 0..index.unwrap() + 1 {
         let arc = edges.out_base[i];
-        let rc = edges.state[arc] * get_reduced_cost_edgeindex(edges, nodes, arc);
+        let rc = edges.state[arc]
+            * (edges.cost[arc] - nodes.potential[edges.source[arc]]
+                + nodes.potential[edges.target[arc]]);
         if rc < zero() {
             return (Some(i), Some(arc));
         }
     }
     (None, None)
 }
-/*
+
 //Block search
 fn _find_block_search<NUM: CloneableNum>(
-    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
-    out_base: &Vec<EdgeIndex>,
-    potential: &Vec<NUM>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
     mut index: Option<usize>,
     block_size: usize,
-) -> (Option<usize>, Option<EdgeIndex>) {
+) -> (Option<usize>, Option<usize>) {
     let mut block_number = 0;
     let mut arc_index = None;
     if index.is_none() {
         index = Some(0);
     }
-    while block_size * block_number <= out_base.len() {
-        let (index_, rc_entering_arc) = out_base
+    while block_size * block_number <= edges.out_base.len() {
+        let (index_, rc_entering_arc) = edges
+            .out_base
             .iter()
             .enumerate()
             .cycle()
             .skip(index.unwrap())
             .take(block_size)
-            .map(|(index, arc)| {
+            .map(|(index, &arc)| {
                 (
                     index,
-                    graph[*arc].state * get_reduced_cost_edgeindex(graph, *arc, potential),
+                    edges.state[arc]
+                        * (edges.cost[arc] - nodes.potential[edges.source[arc]]
+                            + nodes.potential[edges.target[arc]]),
                 )
             })
             .min_by(|&x, &y| x.1.partial_cmp(&y.1).unwrap())
@@ -588,15 +592,14 @@ fn _find_block_search<NUM: CloneableNum>(
     if arc_index.is_none() {
         (None, None)
     } else {
-        let arc = if arc_index.unwrap() < out_base.len() {
-            out_base[arc_index.unwrap()]
+        let arc = if arc_index.unwrap() < edges.out_base.len() {
+            edges.out_base[arc_index.unwrap()]
         } else {
-            out_base[arc_index.unwrap() - out_base.len()]
+            edges.out_base[arc_index.unwrap() - edges.out_base.len()]
         };
         (arc_index, Some(arc))
     }
 }
-*/
 
 //main algorithm function
 pub fn min_cost<NUM: CloneableNum>(
@@ -604,7 +607,7 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    //let block_size = (graph.edge_count() / 15) as usize;
+    let _block_size = (graph.edge_count() / 15) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
 
@@ -647,17 +650,13 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        /*(_index, entering_arc) = _find_block_search(
-            &mut graph,
-            &tlu_solution.out_base,
-            &mut potentials,
-            _index,
-            block_size,
-        );*/
+        (_index, entering_arc) =
 
-        //(_index, entering_arc) = _find_best_arc(&edges, &mut nodes);
+        //_find_block_search(&edges, &nodes, _index, _block_size);
 
-        (_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
+        //_find_best_arc(&edges, &mut nodes);
+
+        _find_first_arc(&edges, &mut nodes, _index);
 
         _iteration += 1;
     }
@@ -668,6 +667,7 @@ pub fn min_cost<NUM: CloneableNum>(
         .iter()
         .enumerate()
         .for_each(|(index, &x)| cost += x * edges.cost[index]);
+    graph.clone().edge_references().for_each(|x| graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()]);
     println!("total cost = {:?}", cost);
     graph
 }
