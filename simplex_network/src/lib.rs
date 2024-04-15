@@ -646,7 +646,9 @@ pub fn min_cost<NUM: CloneableNum>(
         .iter()
         .enumerate()
         .for_each(|(index, &x)| cost += x * edges.cost[index]);
-    graph.clone().edge_references().for_each(|x| graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()]);
+    graph.clone().edge_references().for_each(|x| {
+        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()]
+    });
     println!("total cost = {:?}", cost);
     graph
 }
