@@ -610,27 +610,6 @@ pub fn min_cost<NUM: CloneableNum>(
     let _block_size = (graph.edge_count() / 15) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
-
-    for i in 0..edges.out_base.len() {
-        entering_arc = Some(edges.out_base[i]);
-        if (edges.state[i] * get_reduced_cost_edgeindex(&edges, &nodes, entering_arc.unwrap()))
-            >= zero()
-        {
-            continue;
-        }
-        let mut cycle = find_cycle_with_arc(&edges, &mut nodes, entering_arc.unwrap());
-        let leaving_arc =
-            compute_flowchange(&mut edges, &mut graph, &mut cycle, entering_arc.unwrap());
-        update_sptree(
-            &mut edges,
-            &mut nodes,
-            entering_arc.unwrap(),
-            leaving_arc,
-            _index,
-        );
-        update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
-    }
-
     (_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
     //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
     //(_index, entering_arc) = _find_first_arc(&edges, &nodes, Some(0));
