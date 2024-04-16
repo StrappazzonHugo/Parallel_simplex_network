@@ -16,12 +16,14 @@ pub fn parsed_graph() -> DiGraph::<u32, CustomEdgeIndices<i32>> {
     contents.lines().for_each(|x| {
         if x.chars().nth(0) == Some('p') {
             let line = x.split(' ').collect::<Vec<&str>>()[1..].to_vec();
+            //println!("{:?}", line);
             for i in 0..line[1].parse::<u32>().unwrap() {
                 graph.add_node(i);
             }
         };
         if x.chars().nth(0) == Some('a') {
             let line = x.split(' ').collect::<Vec<&str>>()[1..].to_vec();
+            //println!("{:?}", line);
             let source: usize = line[0].parse::<usize>().unwrap();
             let target: usize = line[1].parse::<usize>().unwrap();
             let capacity: i32 = line[3].parse::<i32>().unwrap();
@@ -33,7 +35,6 @@ pub fn parsed_graph() -> DiGraph::<u32, CustomEdgeIndices<i32>> {
                     cost: (cost),
                     capacity: (capacity),
                     flow: (0),
-                    state: (0),
                 },
             );
         };

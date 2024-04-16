@@ -34,7 +34,6 @@ pub struct CustomEdgeIndices<NUM: CloneableNum> {
     pub cost: NUM,
     pub capacity: NUM,
     pub flow: NUM,
-    pub state: NUM,
 }
 
 pub trait CloneableNum:
@@ -71,7 +70,12 @@ fn initialization<'a, NUM: CloneableNum>(
 
     let sink_id = graph
         .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &max_node_id))
+        .find(|&x| (graph.node_weight(x).unwrap() == &max_node_id)) // SINK_ID
+        .unwrap();
+
+    let source_id = graph
+        .node_indices()
+        .find(|&x| (graph.node_weight(x).unwrap() == &0)) // SINK_ID
         .unwrap();
 
     let mut big_value: NUM = zero();
@@ -92,10 +96,9 @@ fn initialization<'a, NUM: CloneableNum>(
                     cost: big_value,
                     capacity: big_value,
                     flow: demand,
-                    state: zero(),
                 },
             );
-        } else if node == NodeIndex::new(0) {
+        } else if node == source_id { // SOURCE_ID
             graph.add_edge(
                 node,
                 artificial_root,
@@ -103,7 +106,6 @@ fn initialization<'a, NUM: CloneableNum>(
                     cost: big_value,
                     capacity: big_value,
                     flow: demand,
-                    state: zero(),
                 },
             );
         } else {
@@ -114,7 +116,6 @@ fn initialization<'a, NUM: CloneableNum>(
                     cost: big_value,
                     capacity: big_value,
                     flow: zero(),
-                    state: zero(),
                 },
             );
         }
@@ -611,8 +612,8 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     (_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
+
     //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
-    //(_index, entering_arc) = _find_first_arc(&edges, &nodes, Some(0));
     let mut _iteration = 0;
     while !entering_arc.is_none() {
         let mut cycle = find_cycle_with_arc(&edges, &mut nodes, entering_arc.unwrap());
