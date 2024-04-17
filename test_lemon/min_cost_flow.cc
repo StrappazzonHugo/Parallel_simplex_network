@@ -80,7 +80,7 @@ int main() {
   //node nb = 1227, edge nb = 2485, demand = 175
   cout << "starting..." << " demand = " << demand * grid_size << endl;
 
-  ns.run(lemon::NetworkSimplex<ListDigraph>::FIRST_ELIGIBLE);
+  ns.run(lemon::NetworkSimplex<ListDigraph>::BLOCK_SEARCH);
   auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;

@@ -1,6 +1,6 @@
 [profile.release]
 opt-level=3
-debug = true 
+debug = false 
 
 [package]
 name = "main"
