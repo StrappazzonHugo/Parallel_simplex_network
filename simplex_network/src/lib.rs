@@ -280,7 +280,7 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
     nodes: &mut Nodes<NUM>,
     entering_arc: usize,
-) -> usize {
+) -> (usize, usize) {
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
     let up_restricted = edges.flow[entering_arc] != zero();
 
@@ -345,16 +345,21 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         }
     }
 
+    let mut branch: usize = 0;
     if min_delta.0 > min_delta_i.0 {
         min_delta = min_delta_i;
+        branch = 1;
     }
     if min_delta.0 > min_delta_j.0 {
         min_delta = min_delta_j;
+        branch = 2;
     }
     if min_delta_j.0 == min_delta_i.0 {
         min_delta = if up_restricted {
+            branch = 2;
             min_delta_j
         } else {
+            branch = 1;
             min_delta_i
         }
     }
@@ -419,7 +424,7 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
         }
     }
 
-    min_delta.1
+    (min_delta.1, branch)
 }
 
 /* Update sptree structure according to entering arc and leaving arc,
@@ -432,6 +437,7 @@ fn update_sptree<NUM: CloneableNum>(
     entering_arc: usize,
     leaving_arc: usize,
     position: Option<usize>,
+    branch: usize,
 ) {
     if entering_arc == leaving_arc {
         return;
@@ -444,23 +450,33 @@ fn update_sptree<NUM: CloneableNum>(
     let mut path_to_change: &Vec<usize>;
     let mut path_to_root: &Vec<usize>;
 
+    let cutting_depth: usize;
     if nodes.predecessor[k] == Some(l) {
         nodes.predecessor[k] = None;
+        cutting_depth = nodes.depth[k]
     } else {
         nodes.predecessor[l] = None;
+        cutting_depth = nodes.depth[l]
+    }
+    let mut path_from_i: Vec<usize>;
+    let mut path_from_j: Vec<usize>;
+    if branch == 1 {
+        path_from_i = vec![i; nodes.depth[i] + 1 - cutting_depth];
+        path_from_j = vec![j; nodes.depth[j] + 1];
+    } else {
+        // branch == 2
+        path_from_i = vec![i; nodes.depth[i] + 1];
+        path_from_j = vec![j; nodes.depth[j] + 1 - cutting_depth];
     }
 
-    let mut path_from_i: Vec<usize> = Vec::new();
-    let mut path_from_j: Vec<usize> = Vec::new();
-
     let mut current_node: Option<usize> = Some(i);
-    while !current_node.is_none() {
-        path_from_i.push(current_node.unwrap());
+    for index in 0..path_from_i.len() {
+        path_from_i[index] = current_node.unwrap();
         current_node = nodes.predecessor[current_node.unwrap()];
     }
     current_node = Some(j);
-    while !current_node.is_none() {
-        path_from_j.push(current_node.unwrap());
+    for index in 0..path_from_j.len() {
+        path_from_j[index] = current_node.unwrap();
         current_node = nodes.predecessor[current_node.unwrap()];
     }
 
@@ -692,20 +708,20 @@ pub fn min_cost<NUM: CloneableNum>(
     //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
     let mut _iteration = 0;
     while !entering_arc.is_none() {
-        let leaving_arc = compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
+        let (leaving_arc, branch) =
+            compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
         update_sptree(
             &mut edges,
             &mut nodes,
             entering_arc.unwrap(),
             leaving_arc,
             _index,
+            branch,
         );
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) =
-
-        _find_block_search(&edges, &nodes, _index, _block_size);
+        (_index, entering_arc) = _find_block_search(&edges, &nodes, _index, _block_size);
 
         //_find_best_arc(&edges, &mut nodes);
 
