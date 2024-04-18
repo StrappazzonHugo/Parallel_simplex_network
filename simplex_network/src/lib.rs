@@ -6,8 +6,8 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
-//use rayon::prelude::*;
-//use rayon::ThreadPoolBuilder;
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
 struct Edges<NUM: CloneableNum> {
@@ -604,6 +604,7 @@ fn _find_best_arc<NUM: CloneableNum>(
         let rc = edges.state[arc]
             * (edges.cost[arc] - nodes.potential[edges.source[arc]]
                 + nodes.potential[edges.target[arc]]);
+        //println!("testrc = {:?}", rc);
         if rc < min {
             min = rc;
             entering_arc = Some(arc);
@@ -611,6 +612,45 @@ fn _find_best_arc<NUM: CloneableNum>(
         }
     }
     (index, entering_arc)
+}
+
+//Parallel Best Eligible arc
+fn _par_find_best_arc<NUM: CloneableNum>(
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+) -> (Option<usize>, Option<usize>) {
+    let mut mins = vec![zero(); 8];
+    let mut arcs:Vec<(Option<usize>, Option<usize>)> = vec![(None, None); 8];
+    let chunk_size:usize = (edges.out_base.len()/8)+1;
+    let chunks:&Vec<&[usize]>= &edges.out_base.chunks(chunk_size).collect();
+    std::thread::scope(|s| {
+        for (i, (rc_cand, candidate)) in std::iter::zip(&mut mins, &mut arcs).enumerate() {
+            s.spawn(move || {
+            for (index, &arc) in chunks[i].iter().enumerate() {
+                let rc = edges.state[arc]
+                    * (edges.cost[arc] - nodes.potential[edges.source[arc]]
+                        + nodes.potential[edges.target[arc]]);
+                //println!("testrc = {:?}", rc);
+                if rc < *rc_cand {
+                    *rc_cand = rc;
+                    *candidate = (Some(chunk_size * i + index), Some(arc));
+                }
+            }});
+        }
+    });
+    let mut min = mins[0];
+    let mut id = 0 ;
+    for (index, rc) in mins.iter().enumerate() {
+        if rc < &min {
+            min = *rc;
+            id = index;
+        }
+    }
+
+    if min != zero() {
+        return arcs[id];
+    }
+    (None, None)
 }
 
 //First eligible
@@ -645,6 +685,7 @@ fn _find_first_arc<NUM: CloneableNum>(
 
 //Block search
 fn _find_block_search<NUM: CloneableNum>(
+    out_base: &Vec<usize>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
     mut index: Option<usize>,
@@ -655,9 +696,9 @@ fn _find_block_search<NUM: CloneableNum>(
     if index.is_none() {
         index = Some(0);
     }
-    while block_size * block_number <= edges.out_base.len() {
-        let (index_, rc_entering_arc) = edges
-            .out_base
+    while block_size * block_number <= out_base.len() {
+        let (index_, rc_entering_arc) = 
+            out_base
             .iter()
             .enumerate()
             .cycle()
@@ -685,10 +726,10 @@ fn _find_block_search<NUM: CloneableNum>(
     if arc_index.is_none() {
         (None, None)
     } else {
-        let arc = if arc_index.unwrap() < edges.out_base.len() {
-            edges.out_base[arc_index.unwrap()]
+        let arc = if arc_index.unwrap() < out_base.len() {
+            out_base[arc_index.unwrap()]
         } else {
-            edges.out_base[arc_index.unwrap() - edges.out_base.len()]
+            out_base[arc_index.unwrap() - out_base.len()]
         };
         (arc_index, Some(arc))
     }
@@ -700,16 +741,22 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (graph.edge_count() / 100) as usize;
+    let _block_size = (graph.edge_count() / 15) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
+
+
     (_index, entering_arc) = _find_first_arc(&edges, &mut nodes, _index);
 
-    //ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
+    //ThreadPoolBuilder::new().num_threads(8).build_global().unwrap();
     let mut _iteration = 0;
-    while !entering_arc.is_none() {
+    while entering_arc.is_some() {
+
+
+
         let (leaving_arc, branch) =
             compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
+
         update_sptree(
             &mut edges,
             &mut nodes,
@@ -721,9 +768,13 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) = _find_block_search(&edges, &nodes, _index, _block_size);
+        (_index, entering_arc) = 
 
-        //_find_best_arc(&edges, &mut nodes);
+        _find_block_search(&edges.out_base, &edges, &nodes, _index, _block_size);
+
+        //_find_best_arc(&edges, &nodes);
+        //_par_find_best_arc(&edges, &nodes);
+
 
         //_find_first_arc(&edges, &mut nodes, _index);
 

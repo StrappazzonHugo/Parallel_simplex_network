@@ -30,7 +30,7 @@ int main() {
 
   ListDigraph::ArcMap<int> costmap(g);
   ListDigraph::ArcMap<int> capamap(g);
-  for (int i = 0; i < 5000; i++) {
+  for (int i = 0; i < 1000; i++) {
     ListDigraph::Node l = g.addNode();
     left.push_back(l);
     ListDigraph::Arc a1 = g.addArc(n0, l);
@@ -60,7 +60,7 @@ int main() {
   NetworkSimplex<ListDigraph> ns(g);
   ns.costMap(costmap);
   ns.upperMap(capamap);
-  ns.stSupply(n0, n1, 50000);
+  ns.stSupply(n0, n1, 10000);
 
   ListDigraph::ArcMap<int> res(g);
   auto start = high_resolution_clock::now();

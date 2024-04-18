@@ -25,7 +25,7 @@ int main() {
   ListDigraph::Node n0 = g.addNode();
   ListDigraph::Node n1 = g.addNode();
 
-  int grid_size = 150;
+  int grid_size = 500;
   vector<vector<ListDigraph::Node>> nodes(grid_size,
                                           vector<ListDigraph::Node>(grid_size));
 
@@ -80,7 +80,7 @@ int main() {
   //node nb = 1227, edge nb = 2485, demand = 175
   cout << "starting..." << " demand = " << demand * grid_size << endl;
 
-  ns.run(lemon::NetworkSimplex<ListDigraph>::BLOCK_SEARCH);
+  ns.run(lemon::NetworkSimplex<ListDigraph>::BEST_ELIGIBLE);
   auto stop = high_resolution_clock::now();
   ns.flowMap(res);
   cout << "total cost : " << ns.totalCost() << endl;
