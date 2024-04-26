@@ -31,7 +31,6 @@ fn main() {
                 cost: (0),
                 capacity: (100000000),
                 flow: (0),
-                state: (1),
             },
         );
     }
@@ -52,7 +51,6 @@ fn main() {
                 cost: (0),
                 capacity: (100000000),
                 flow: (0),
-                state: (1),
             },
         );
     }
@@ -71,7 +69,6 @@ fn main() {
                     cost: (cost as i32),
                     capacity: (10),
                     flow: (0),
-                state: (1),
                 },
             );
         }

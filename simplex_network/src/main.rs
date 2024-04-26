@@ -5,25 +5,20 @@ use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const NODE_NUMBER: u32 = 1000;
+const GRID_SIZE: i32 = 120;
 
 fn main() {
     //let args: Vec<String> = std::env::args().collect();
     let mut rng = rand::thread_rng();
-    let node_number = NODE_NUMBER * 2;
-
-    let mut coord: Vec<(i64, i64)> = vec![(0, 0); (node_number + 1) as usize];
 
     let mut graph = DiGraph::<u32, CustomEdgeIndices<i32>>::new();
 
     let source = graph.add_node(0); //source
 
-    //One part
-    for i in 1..NODE_NUMBER + 1 {
-        let n = graph.add_node(i);
-        let x: i64 = (rng.gen::<f32>() * 10000f32) as i64;
-        let y: i64 = (rng.gen::<f32>() * 10000f32) as i64;
-        coord[i as usize] = (x, y);
+    // first row of the grid
+    let mut vertical_node: Vec<NodeIndex> = Vec::new();
+    for i in 1..GRID_SIZE + 1 {
+        let n = graph.add_node(i as u32);
         graph.add_edge(
             source,
             n,
@@ -33,17 +28,52 @@ fn main() {
                 flow: (0),
             },
         );
-    }
-    //the other part
-    for i in NODE_NUMBER + 1..node_number + 1 {
-        graph.add_node(i);
-        let x: i64 = (rng.gen::<f32>() * 10000f32) as i64;
-        let y: i64 = (rng.gen::<f32>() * 10000f32) as i64;
-        coord[i as usize] = (x, y);
+        vertical_node.push(n);
     }
 
-    let sink = graph.add_node(node_number + 1);
-    for i in NODE_NUMBER + 1..node_number + 1 {
+    for n in 0..vertical_node.len() {
+        graph.add_edge(
+            vertical_node[n],
+            vertical_node[(n + 1) % vertical_node.len()],
+            CustomEdgeIndices {
+                cost: ((rng.gen::<f32>() * GRID_SIZE as f32) as i32),
+                capacity: (10),
+                flow: (0),
+            },
+        );
+    }
+
+    
+    for i in 1..GRID_SIZE {
+        vertical_node.clear();
+        for j in 1..GRID_SIZE + 1 {
+            let n = graph.add_node((i * GRID_SIZE + j) as u32);
+            vertical_node.push(n);
+            graph.add_edge(
+                NodeIndex::new(n.index() - GRID_SIZE as usize),
+                n,
+                CustomEdgeIndices {
+                    cost: ((rng.gen::<f32>() * GRID_SIZE as f32) as i32),
+                    capacity: (10),
+                    flow: (0),
+                },
+            );
+        }
+        for n in 0..vertical_node.len() {
+            graph.add_edge(
+                vertical_node[n],
+                vertical_node[(n + 1) % vertical_node.len()],
+                CustomEdgeIndices {
+                    cost: ((rng.gen::<f32>() * GRID_SIZE as f32) as i32),
+                    capacity: (10),
+                    flow: (0),
+                },
+            );
+        }
+    }
+
+    let sink = graph.add_node((GRID_SIZE * GRID_SIZE + 1) as u32);
+    for i in (GRID_SIZE * (GRID_SIZE - 1) + 1)..(GRID_SIZE * GRID_SIZE)+1 {
         graph.add_edge(
             NodeIndex::new(i as usize),
             sink,
@@ -55,36 +85,18 @@ fn main() {
         );
     }
 
-    for i in 1..NODE_NUMBER + 1 {
-        for j in NODE_NUMBER + 1..node_number + 1 {
-            let cost = ((coord[i as usize].0 - coord[j as usize].0) as f32
-                * (coord[i as usize].0 - coord[j as usize].0) as f32
-                + (coord[i as usize].1 - coord[j as usize].1) as f32
-                    * (coord[i as usize].1 - coord[j as usize].1) as f32)
-                .sqrt() as i64;
-            graph.add_edge(
-                NodeIndex::new(i as usize),
-                NodeIndex::new(j as usize),
-                CustomEdgeIndices {
-                    cost: (cost as i32),
-                    capacity: (10),
-                    flow: (0),
-                },
-            );
-        }
-    }
-
     let start = SystemTime::now();
-    let demand: i32 = 10;
+    let demand: i32 = 5;
     println!(
-        "node nb = {:?}, demand = {:?}",
+        "node nb = {:?}, edge nb = {:?}, demand = {:?}",
         graph.node_count(),
-        demand * (NODE_NUMBER as i32)
+        graph.edge_count(),
+        demand * (GRID_SIZE as i32)
     );
-    let _min_cost_flow = min_cost(graph, demand * (NODE_NUMBER as i32));
+    let _min_cost_flow = min_cost(graph, demand * (GRID_SIZE as i32));
     match start.elapsed() {
         Ok(elapsed) => {
-            println!("time = {:?}", (elapsed.as_millis()as f64/1000f64) as f64);
+            println!("time = {:?}", (elapsed.as_millis() as f64 / 1000f64) as f64);
         }
         Err(e) => {
             println!("Error: {e:?}");
