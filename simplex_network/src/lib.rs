@@ -850,7 +850,7 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut _iteration = 0;
 
     (_index, entering_arc) = _find_best_arc(&edges, &nodes);
-    let _thread_nb = 2;
+    let _thread_nb = 8;
     ThreadPoolBuilder::new()
     .num_threads(_thread_nb)
     .build_global()
@@ -874,7 +874,6 @@ pub fn min_cost<NUM: CloneableNum>(
         
 
 
-        //_find_first_arc(&edges, &mut nodes, _index);
         //__find_block_search(&edges.out_base, &edges, &nodes, _index, _block_size);
         _par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
 
