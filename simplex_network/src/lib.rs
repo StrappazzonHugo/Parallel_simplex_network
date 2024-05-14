@@ -6,6 +6,7 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
+use petgraph::dot::*;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 
@@ -76,7 +77,7 @@ fn initialization<'a, NUM: CloneableNum>(
 
     let source_id = graph
         .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &0)) // SINK_ID
+        .find(|&x| (graph.node_weight(x).unwrap() == &1)) // SINK_ID
         .unwrap();
 
     let mut big_value: NUM = zero();
@@ -695,58 +696,6 @@ fn _find_first_arc<NUM: CloneableNum>(
     (None, None)
 }
 
-//Block search
-fn _find_block_search<NUM: CloneableNum>(
-    out_base: &Vec<usize>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    mut index: Option<usize>,
-    block_size: usize,
-    //return (arc_index, arc_id)
-) -> (Option<usize>, Option<usize>) {
-    let mut block_number = 0;
-    let mut arc_index = None;
-    if index.is_none() {
-        index = Some(0);
-    }
-    while block_size * block_number <= out_base.len() {
-        let (index_, entering_arc) = out_base
-            .iter()
-            .enumerate()
-            .cycle()
-            .skip(index.unwrap())
-            .take(block_size)
-            .min_by(|&x, &y| {
-                (edges.state[*x.1] * get_reduced_cost_edgeindex(edges, nodes, *x.1))
-                    .partial_cmp(
-                        &(edges.state[*y.1] * get_reduced_cost_edgeindex(edges, nodes, *y.1)),
-                    )
-                    .unwrap()
-            })
-            .unwrap();
-        let rc_entering_arc =
-            edges.state[*entering_arc] * get_reduced_cost_edgeindex(edges, nodes, *entering_arc);
-        if rc_entering_arc >= zero::<NUM>() {
-            index = Some(index.unwrap() + block_size);
-            block_number += 1;
-        } else {
-            arc_index = Some(index_);
-            break;
-        }
-    }
-
-    if arc_index.is_none() {
-        (None, None)
-    } else {
-        let arc = if arc_index.unwrap() < out_base.len() {
-            out_base[arc_index.unwrap()]
-        } else {
-            out_base[arc_index.unwrap() - out_base.len()]
-        };
-        (arc_index, Some(arc))
-    }
-}
-
 fn __find_block_search<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
@@ -764,7 +713,7 @@ fn __find_block_search<NUM: CloneableNum>(
         {
             eval += 1;
             let arc = edges.out_base[i];
-            let rc = edges.state[arc] //* get_reduced_cost_edgeindex(edges, nodes, arc);
+            let rc = edges.state[arc]
                 * (edges.cost[arc] - nodes.potential[edges.source[arc]]
                     + nodes.potential[edges.target[arc]]);
             if rc < min {
@@ -788,54 +737,38 @@ fn _par_block_search<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
-    mut index: Option<usize>,
+    index: Option<usize>,
     block_size: usize,
-    thread_nb: usize,
     //return (arc_index, arc_id)
 ) -> (Option<usize>, Option<usize>) {
-    let mut _iteration = 0;
-
-    while (thread_nb * block_size * _iteration) <= (out_base.len() + thread_nb * block_size) {
-        let mut mins = vec![zero(); thread_nb];
-        let mut arcs: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); thread_nb];
-        _iteration += 1;
-        let chunks: &Vec<&[usize]> = &out_base[index.unwrap()..].chunks(block_size).collect();
-        std::thread::scope(|s| {
-            for (i, (rc_cand, candidate)) in std::iter::zip(&mut mins, &mut arcs).enumerate() {
-                if i >= chunks.len() {
-                    *rc_cand = zero();
-                    *candidate = (None, None);
-                    continue;
-                };
-                s.spawn(move || {
-                    for (_index, &arc) in chunks[i].iter().enumerate() {
-                        let rc = edges.state[arc]
-                            * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                                + nodes.potential[edges.target[arc]]);
-                        if rc < *rc_cand {
-                            *rc_cand = rc;
-                            *candidate =
-                                (Some(block_size * i + _index + index.unwrap()), Some(arc));
-                        }
+    let end_len = out_base[index.unwrap()..].len();
+    let end_blocks_number = end_len / block_size + if end_len % block_size == 0 { 0 } else { 1 };
+    let chunks = out_base[index.unwrap()..]
+        .par_chunks(block_size)
+        .chain(out_base[..index.unwrap()].par_chunks(block_size));
+    chunks
+        .enumerate()
+        .by_exponential_blocks()
+        .find_map_first(|(chunk_index, chunk)| {
+            let mut candidate = None;
+            let mut rc_cand: NUM = zero();
+            for (_index, &arc) in chunk.iter().enumerate() {
+                let rc = edges.state[arc]
+                    * (edges.cost[arc] - nodes.potential[edges.source[arc]]
+                        + nodes.potential[edges.target[arc]]);
+                if rc < rc_cand {
+                    let mut rc_index = block_size * chunk_index + _index + index.unwrap();
+                    //TODO just return chunk index and map at the end
+                    if rc_index > out_base.len() {
+                        rc_index = (chunk_index - end_blocks_number) * block_size + _index;
                     }
-                });
+                    rc_cand = rc;
+                    candidate = Some((Some(rc_index), Some(arc)));
+                }
             }
-        });
-        let mut min = (0, mins[0]);
-        for (i, rc) in mins.iter().enumerate() {
-            if *rc < min.1 {
-                min = (i, *rc); 
-            }
-        }
-        if min.1 < zero::<NUM>(){
-            return arcs[min.0];
-        }
-        index = Some(index.unwrap() + block_size * thread_nb);
-        if index.unwrap() >= out_base.len() {
-            index = Some(0);
-        }
-    }
-    (None, None)
+            candidate
+        })
+        .unwrap_or_default()
 }
 
 //main algorithm function
@@ -844,21 +777,21 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 60) as usize;
+    let _block_size = (edges.out_base.len() / 40) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
 
     (_index, entering_arc) = _find_best_arc(&edges, &nodes);
-    let _thread_nb = 8;
+    let _thread_nb = 2;
     ThreadPoolBuilder::new()
-    .num_threads(_thread_nb)
-    .build_global()
-    .unwrap();
+        .num_threads(_thread_nb)
+        .build_global()
+        .unwrap();
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
-
+        
         update_sptree(
             &mut edges,
             &mut nodes,
@@ -870,12 +803,11 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) = 
-        
-
-
-        //__find_block_search(&edges.out_base, &edges, &nodes, _index, _block_size);
-        _par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
+        (_index, entering_arc) =
+        // letmehere
+            
+        __find_block_search(&edges.out_base, &edges, &nodes, _index, _block_size);
+        //_par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size);
 
         //_find_best_arc(&edges, &nodes);
         //_par_find_best_arc(&edges, &nodes, thread_nb);
@@ -885,15 +817,15 @@ pub fn min_cost<NUM: CloneableNum>(
         _iteration += 1;
     }
     println!("iterations : {:?}", _iteration);
+    graph.remove_node(NodeIndex::new(graph.node_count()-1));
     let mut cost: NUM = zero();
-    edges
-        .flow
-        .iter()
-        .enumerate()
-        .for_each(|(index, &x)| cost += x * edges.cost[index]);
+    let mut total_flow: NUM = zero();
     graph.clone().edge_references().for_each(|x| {
-        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()]
+        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()];
+        cost += edges.flow[x.id().index()] * edges.cost[x.id().index()];
     });
-    println!("total cost = {:?}", cost);
+    graph.edges_directed(NodeIndex::new(graph.node_count()-1), Incoming).for_each(|x| total_flow += edges.flow[x.id().index()]);
+    //println!("{:?}", Dot::new(&graph));
+    println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
     graph
 }
