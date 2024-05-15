@@ -74,12 +74,10 @@ fn initialization<'a, NUM: CloneableNum>(
         .node_indices()
         .find(|&x| (graph.node_weight(x).unwrap() == &max_node_id)) // SINK_ID
         .unwrap();
-    println!("sink id = {:?}", sink_id);
     let source_id = graph
         .node_indices()
         .find(|&x| (graph.node_weight(x).unwrap() == &0)) // SINK_ID
         .unwrap();
-    println!("source id = {:?}", source_id);
     //TODO source/sink id in param
 
     let mut big_value: NUM = zero();
@@ -827,7 +825,6 @@ pub fn min_cost<NUM: CloneableNum>(
         cost += edges.flow[x.id().index()] * edges.cost[x.id().index()];
     });
     let sink_id = graph.node_count()-1;
-    println!("sink = {:?}", sink_id);
     graph.edges_directed(NodeIndex::new(sink_id), Incoming).for_each(|x| total_flow += edges.flow[x.id().index()]);
     //println!("{:?}", Dot::new(&graph));
     println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
