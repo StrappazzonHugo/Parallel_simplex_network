@@ -282,6 +282,7 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
     nodes: &mut Nodes<NUM>,
     entering_arc: usize,
+    //(leaving_arc_id, branch : 1 or 2)
 ) -> (usize, usize) {
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
     let up_restricted = edges.flow[entering_arc] != zero();
@@ -452,6 +453,7 @@ fn update_sptree<NUM: CloneableNum>(
     let mut path_to_change: &Vec<usize>;
     let mut path_to_root: &Vec<usize>;
 
+    //used to get length of vector path_from_*
     let cutting_depth: usize;
     if nodes.predecessor[k] == Some(l) {
         nodes.predecessor[k] = None;
@@ -460,6 +462,8 @@ fn update_sptree<NUM: CloneableNum>(
         nodes.predecessor[l] = None;
         cutting_depth = nodes.depth[l]
     }
+
+    //vectors contain id of arcs from i/j to root or removed arc
     let mut path_from_i: Vec<usize>;
     let mut path_from_j: Vec<usize>;
     if branch == 1 {
@@ -793,6 +797,7 @@ fn _find_start<NUM: CloneableNum>(
                 })
         })
 }
+
 #[inline(never)]
 fn _find_block_search<NUM: CloneableNum>(
     out_base: &Vec<usize>,
@@ -909,7 +914,7 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 30) as usize;
+    let _block_size = (edges.out_base.len() / 50) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
@@ -937,13 +942,11 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) = __find_block_search(
-            &edges.out_base,
-            &edges,
-            &nodes,
-            _index.expect("checked is_some()"),
-            _block_size,
-        );
+        (_index, entering_arc) = 
+
+
+        //Pivot rules choice
+        __find_block_search(&edges.out_base, &edges, &nodes, _index.expect(""), _block_size);
         // _par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
 
         //_find_best_arc(&edges, &nodes);
