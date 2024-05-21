@@ -7,8 +7,9 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
-use rayon::prelude::*;
-use rayon::ThreadPoolBuilder;
+//use petgraph::dot::*;
+//use rayon::prelude::*;
+//use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
 struct Edges<NUM: CloneableNum> {
@@ -282,152 +283,107 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
     nodes: &mut Nodes<NUM>,
     entering_arc: usize,
-    //(leaving_arc_id, branch : 1 or 2)
+    //(leaving_arc_id:usize, branch: 1 or 2)
 ) -> (usize, usize) {
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
     let up_restricted = edges.flow[entering_arc] != zero();
+    let (node1, node2) = if up_restricted {(i, j)} else {(j, i)}; 
+    let (mut current1, mut current2) = (node1, node2);
+    let (mut cycle_part1, mut cycle_part2) = (vec![], vec![]);
 
-    let mut current_i = i;
-    let mut current_j = j;
+    //fill both vector part1 and part2 of the cycle
+    while current1 != current2 {
+        
+        if nodes.depth[current1] < nodes.depth[current2] {
+            cycle_part2.push(nodes.edge_tree[current2]);
+            current2 = nodes.predecessor[current2].expect("found");
+        } else {
+            cycle_part1.push(nodes.edge_tree[current1]);
+            current1 = nodes.predecessor[current1].expect("found");
+        }
+        if nodes.predecessor[current1].is_some() && nodes.predecessor[current2].is_some() {
+            assert_eq!(nodes.depth[current1], nodes.depth[nodes.predecessor[current1].unwrap()]+1);
+            assert_eq!(nodes.depth[current2], nodes.depth[nodes.predecessor[current2].unwrap()]+1);
+        }
+    }
+   
+    //fill vector of delta of arc in part 1 and 2
+    let (mut delta_p1, mut delta_p2):(Vec<(usize, NUM, NUM)>, Vec<(usize, NUM, NUM)>) = 
+                                      (vec![(0, zero(), one());cycle_part1.len()], vec![(0, zero(), one());cycle_part2.len()]);
+    cycle_part1.iter().enumerate().for_each(|(index, &x)|{ 
+                                            let pred = nodes.predecessor[edges.source[x]];
+                                            delta_p1[index] = 
+                                            if pred.is_some() && edges.target[x] == pred.unwrap() {
+                                                (index, edges.capacity[x] - edges.flow[x], one()) }
+                                            else { (index, edges.flow[x], zero::<NUM>() - one()) }});
+    cycle_part2.iter().enumerate().for_each(|(index, &x)| {
+                                            let pred = nodes.predecessor[edges.target[x]];
+                                            delta_p2[index] = 
+                                            if pred.is_some() && edges.source[x] == pred.unwrap() {
+                                                (index, edges.capacity[x] - edges.flow[x], one()) }
+                                            else { (index, edges.flow[x], zero::<NUM>() - one()) }});    
+    let min_d1 = delta_p1.iter().min_set_by(|(_, delta1, _), (_, delta2, _)| delta1.partial_cmp(&delta2).unwrap());
+    let min_d2 = delta_p2.iter().min_set_by(|(_, delta1, _), (_, delta2, _)| delta1.partial_cmp(&delta2).unwrap());
+   
+    let leaving_p1 = min_d1.into_iter().max_by(|(pos1,_,_), (pos2,_,_)| pos1.cmp(&pos2));
+    let leaving_p2 = min_d2.into_iter().min_by(|(pos1,_,_), (pos2,_,_)| pos1.cmp(&pos2));
 
-    let mut min_delta = if up_restricted {
-        (edges.flow[entering_arc], entering_arc)
+    let leaving_set:usize;
+    let leaving_arc:usize;
+    
+    let min_p1_p2 = if leaving_p1.is_none() {
+        leaving_set = 2; leaving_p2.unwrap() }
+    else if leaving_p2.is_none() {
+        leaving_set = 1; leaving_p1.unwrap() }
+    else if leaving_p1.unwrap().1 >= leaving_p2.unwrap().1 { leaving_set = 2; leaving_p2.unwrap() }
+                    else { leaving_set = 1; leaving_p1.unwrap() };
+     
+    let delta_entering = if up_restricted {edges.flow[entering_arc]} else { edges.capacity[entering_arc]};
+    
+
+    let mut final_delta = min_p1_p2.1;
+    if min_p1_p2.1 > delta_entering {
+        leaving_arc = entering_arc;
+        final_delta = delta_entering;
     } else {
-        (edges.capacity[entering_arc], entering_arc)
-    };
-
-    let mut min_delta_i = min_delta;
-    let mut min_delta_j = min_delta;
-
-    while current_j != current_i {
-        let arc_i = nodes.edge_tree[current_i];
-        let arc_j = nodes.edge_tree[current_j];
-        let delta: (NUM, usize);
-        if nodes.depth[current_i] < nodes.depth[current_j] {
-            if up_restricted {
-                if current_j == edges.target[arc_j] {
-                    delta = (edges.capacity[arc_j] - edges.flow[arc_j], arc_j);
-                } else {
-                    delta = (edges.flow[arc_j], arc_j);
-                }
-                if delta.0 < min_delta_j.0 {
-                    min_delta_j = delta
-                };
-            } else {
-                if current_j == edges.source[arc_j] {
-                    delta = (edges.capacity[arc_j] - edges.flow[arc_j], arc_j);
-                } else {
-                    delta = (edges.flow[nodes.edge_tree[current_j]], arc_j);
-                }
-                if delta.0 <= min_delta_j.0 {
-                    min_delta_j = delta
-                };
-            }
-            current_j = nodes.predecessor[current_j].unwrap();
-        } else {
-            if up_restricted {
-                if current_i == edges.source[arc_i] {
-                    delta = (edges.capacity[arc_i] - edges.flow[arc_i], arc_i);
-                } else {
-                    delta = (edges.flow[arc_i], arc_i);
-                }
-                if delta.0 <= min_delta_i.0 {
-                    min_delta_i = delta
-                };
-            } else {
-                if current_i == edges.target[arc_i] {
-                    delta = (edges.capacity[arc_i] - edges.flow[arc_i], arc_i);
-                } else {
-                    delta = (edges.flow[arc_i], arc_i);
-                }
-                if delta.0 < min_delta_i.0 {
-                    min_delta_i = delta
-                };
-            }
-            current_i = nodes.predecessor[current_i].unwrap();
+        if leaving_set == 1 {
+            leaving_arc = cycle_part1[min_p1_p2.0];
+        }else { // leaving_set == 2
+            leaving_arc = cycle_part2[min_p1_p2.0];
         }
     }
 
-    let mut branch: usize = 0;
-    if min_delta.0 > min_delta_i.0 {
-        min_delta = min_delta_i;
-        branch = 1;
-    }
-    if min_delta.0 > min_delta_j.0 {
-        min_delta = min_delta_j;
-        branch = 2;
-    }
-    if min_delta_j.0 == min_delta_i.0 {
-        min_delta = if up_restricted {
-            branch = 2;
-            min_delta_j
-        } else {
-            branch = 1;
-            min_delta_i
-        }
-    }
 
-    if min_delta.0 != zero() {
-        current_i = i;
-        current_j = j;
-        if up_restricted {
-            edges.flow[entering_arc] -= min_delta.0;
-        } else {
-            edges.flow[entering_arc] += min_delta.0;
-        }
-        if edges.flow[entering_arc] == zero() {
-            edges.state[entering_arc] = one();
-        } else if edges.flow[entering_arc] == edges.capacity[entering_arc] {
-            edges.state[entering_arc] = zero::<NUM>() - one();
-        }
-        while current_j != current_i {
-            let arc_i = nodes.edge_tree[current_i];
-            let arc_j = nodes.edge_tree[current_j];
-            if nodes.depth[current_i] < nodes.depth[current_j] {
-                if up_restricted {
-                    if current_j == edges.target[arc_j] {
-                        edges.flow[arc_j] += min_delta.0;
-                    } else {
-                        edges.flow[arc_j] -= min_delta.0;
-                    }
-                } else {
-                    if current_j == edges.source[arc_j] {
-                        edges.flow[arc_j] += min_delta.0;
-                    } else {
-                        edges.flow[arc_j] -= min_delta.0;
-                    }
-                }
-                if edges.flow[arc_j] == zero() {
-                    edges.state[arc_j] = one();
-                } else if edges.flow[arc_j] == edges.capacity[arc_j] {
-                    edges.state[arc_j] = zero::<NUM>() - one();
-                }
-                current_j = nodes.predecessor[current_j].unwrap();
-            } else {
-                if up_restricted {
-                    if current_i == edges.source[arc_i] {
-                        edges.flow[arc_i] += min_delta.0;
-                    } else {
-                        edges.flow[arc_i] -= min_delta.0;
-                    }
-                } else {
-                    if current_i == edges.target[arc_i] {
-                        edges.flow[arc_i] += min_delta.0;
-                    } else {
-                        edges.flow[arc_i] -= min_delta.0;
-                    }
-                }
-                if edges.flow[arc_i] == zero() {
-                    edges.state[arc_i] = one();
-                } else if edges.flow[arc_i] == edges.capacity[arc_i] {
-                    edges.state[arc_i] = zero::<NUM>() - one();
-                }
-                current_i = nodes.predecessor[current_i].unwrap();
-            }
-        }
-    }
+    //Flow update
+    if final_delta != zero() {
+    cycle_part1.iter().zip(delta_p1.iter()).for_each(|(&edge_cycle, (_, _, dir))| {edges.flow[edge_cycle] += *dir * final_delta;
+                                                                                    if edges.flow[edge_cycle] == edges.capacity[edge_cycle]{
+                                                                                        edges.state[edge_cycle] = zero::<NUM>() - one()}
+                                                                                    if edges.flow[edge_cycle] == zero() {
+                                                                                        edges.state[edge_cycle] = one()};});
+    cycle_part2.iter().zip(delta_p2.iter()).for_each(|(&edge_cycle, (_, _, dir))| {edges.flow[edge_cycle] += *dir * final_delta;
+                                                                                    if edges.flow[edge_cycle] == edges.capacity[edge_cycle]{
+                                                                                        edges.state[edge_cycle] = zero::<NUM>() - one()}
+                                                                                    if edges.flow[edge_cycle] == zero() {
+                                                                                        edges.state[edge_cycle] = one()};});
+    if up_restricted {
+        edges.flow[entering_arc] -= final_delta;
 
-    (min_delta.1, branch)
+    } else {
+        edges.flow[entering_arc] += final_delta;
+    }}
+    if edges.flow[entering_arc] == edges.capacity[entering_arc]{
+         edges.state[entering_arc] = zero::<NUM>() - one()}
+    if edges.flow[entering_arc] == zero() {
+        edges.state[entering_arc] = one()}
+   
+    let branch = if up_restricted {
+                    if leaving_set == 1 {2} else {1}
+                 } else {
+                     leaving_set 
+                 };
+
+    (leaving_arc, branch)
 }
 
 /* Update sptree structure according to entering arc and leaving arc,
@@ -466,11 +422,11 @@ fn update_sptree<NUM: CloneableNum>(
     //vectors contain id of arcs from i/j to root or removed arc
     let mut path_from_i: Vec<usize>;
     let mut path_from_j: Vec<usize>;
-    if branch == 1 {
+    if branch == 2  {
         path_from_i = vec![i; nodes.depth[i] + 1 - cutting_depth];
         path_from_j = vec![j; nodes.depth[j] + 1];
     } else {
-        // branch == 2
+        // branch == 1
         path_from_i = vec![i; nodes.depth[i] + 1];
         path_from_j = vec![j; nodes.depth[j] + 1 - cutting_depth];
     }
@@ -798,7 +754,7 @@ fn _find_start<NUM: CloneableNum>(
         })
 }
 
-#[inline(never)]
+//#[inline(never)]
 fn _find_block_search<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
@@ -914,10 +870,11 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 50) as usize;
+    let _block_size = (edges.out_base.len() / 30) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
+    
 
     (_index, entering_arc) = _find_best_arc(&edges, &nodes);
     /*let _thread_nb = 8;
@@ -928,9 +885,6 @@ pub fn min_cost<NUM: CloneableNum>(
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
-
-        /*println!("entering arc = {:?}", entering_arc);
-        println!("leaving arc = {:?}", leaving_arc);*/
         update_sptree(
             &mut edges,
             &mut nodes,
@@ -939,21 +893,19 @@ pub fn min_cost<NUM: CloneableNum>(
             _index,
             branch,
         );
-
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
         (_index, entering_arc) = 
 
-
         //Pivot rules choice
         __find_block_search(&edges.out_base, &edges, &nodes, _index.expect(""), _block_size);
+        
         // _par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
 
         //_find_best_arc(&edges, &nodes);
         //_par_find_best_arc(&edges, &nodes, thread_nb);
 
         //_find_first_arc(&edges, &mut nodes, _index);
-
         _iteration += 1;
     }
     println!("iterations : {:?}", _iteration);
