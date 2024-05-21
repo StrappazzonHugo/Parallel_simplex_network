@@ -1,5 +1,5 @@
-use main::min_cost;
-use main::CustomEdgeIndices;
+use isera::min_cost;
+use isera::CustomEdgeIndices;
 use petgraph::dot::Dot;
 use petgraph::graph::*;
 use rand::Rng;

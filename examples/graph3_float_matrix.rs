@@ -1,11 +1,11 @@
-use main::min_cost;
-use main::CustomEdgeIndices;
+use isera::min_cost;
+use isera::CustomEdgeIndices;
 use petgraph::data::FromElements;
 use petgraph::dot::Dot;
 use petgraph::graph::*;
 use petgraph::matrix_graph::DiMatrix;
 use rand::Rng;
-use main::State::*;
+use isera::State::*;
 use std::time::SystemTime;
 
 const NODE_NUMBER: u32 = 10;
