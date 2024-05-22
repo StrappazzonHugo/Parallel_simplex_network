@@ -7,9 +7,10 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
+//use std::time::SystemTime;
 //use petgraph::dot::*;
-//use rayon::prelude::*;
-//use rayon::ThreadPoolBuilder;
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
 struct Edges<NUM: CloneableNum> {
@@ -279,7 +280,7 @@ fn update_node_potentials<'a, NUM: CloneableNum>(
 
 //computing delta the amount of flow we can augment through the cycle
 //returning the leaving edge
-fn compute_flowchange<'a, NUM: CloneableNum>(
+fn __compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
     nodes: &mut Nodes<NUM>,
     entering_arc: usize,
@@ -435,8 +436,6 @@ fn compute_flowchange<'a, NUM: CloneableNum>(
     (leaving_arc, branch)
 }
 
-
-
 fn _compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
     nodes: &mut Nodes<NUM>,
@@ -587,7 +586,6 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
 
     (min_delta.1, branch)
 }
-
 
 /* Update sptree structure according to entering arc and leaving arc,
 * reorder predecessors to keep tree coherent tree structure from one basis
@@ -869,12 +867,13 @@ fn __find_block_search<NUM: CloneableNum>(
     block_size: usize,
     //return (arc_index, arc_id)
 ) -> (Option<usize>, Option<usize>) {
-    let mut eval = 0;
     let mut min: NUM = zero();
     let mut entering_arc: Option<usize> = None;
-    while eval < out_base.len() {
+    let mut nb_block_checked = 0;
+    while nb_block_checked < (out_base.len() / block_size) + 1 {
+        nb_block_checked += 1;
+        //let start = SystemTime::now();
         for i in index..(index + std::cmp::min(block_size, out_base.len() - index)) {
-            eval += 1;
             let arc = unsafe { *edges.out_base.get_unchecked(i) };
             let rcplus = unsafe {
                 *edges.cost.get_unchecked(arc)
@@ -906,10 +905,19 @@ fn __find_block_search<NUM: CloneableNum>(
         if index > out_base.len() {
             index = 0;
         }
+        /*match start.elapsed() {
+            Ok(elapsed) => {
+                println!("{:?}", elapsed.as_nanos());
+            }
+            Err(e) => {
+                println!("Error: {e:?}");
+            }
+        }*/
     }
     (None, None)
 }
 
+/*
 fn _find_start<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
@@ -955,7 +963,7 @@ fn _find_start<NUM: CloneableNum>(
                     ((rcplus < rcminus) ^ (s.is_negative())).then_some(pos)
                 })
         })
-}
+}*/
 
 //#[inline(never)]
 fn _find_block_search<NUM: CloneableNum>(
@@ -972,7 +980,7 @@ fn _find_block_search<NUM: CloneableNum>(
     while nb_block_checked < (out_base.len() / block_size) + 1 {
         nb_block_checked += 1;
         let Some((arc_index, arc_id, rc)) = out_base[index..]
-            .iter()
+            .par_iter()
             .chain(&out_base[..index])
             .enumerate()
             .take(block_size)
@@ -992,7 +1000,6 @@ fn _find_block_search<NUM: CloneableNum>(
         else {
             unreachable!()
         };
-
         if rc < zero() {
             let new_index = index + arc_index;
             if new_index >= out_base.len() {
@@ -1038,9 +1045,16 @@ fn _par_block_search<NUM: CloneableNum>(
                 };
                 s.spawn(move || {
                     for (_index, &arc) in chunks[i].iter().enumerate() {
-                        let rc = edges.state[arc]
-                            * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                                + nodes.potential[edges.target[arc]]);
+                        let rc = unsafe {
+                    *edges.state.get_unchecked(arc)
+                        * (*edges.cost.get_unchecked(arc)
+                            - *nodes
+                                .potential
+                                .get_unchecked(*edges.source.get_unchecked(arc))
+                            + *nodes
+                                .potential
+                                .get_unchecked(*edges.target.get_unchecked(arc)))
+                };
                         if rc < *rc_cand {
                             *rc_cand = rc;
                             *candidate =
@@ -1079,14 +1093,15 @@ pub fn min_cost<NUM: CloneableNum>(
     let mut _iteration = 0;
 
     (_index, entering_arc) = _find_best_arc(&edges, &nodes);
-    /*let _thread_nb = 8;
+    let _thread_nb = 8;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
-        .unwrap();*/
+        .unwrap();
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
+
         update_sptree(
             &mut edges,
             &mut nodes,
@@ -1095,14 +1110,20 @@ pub fn min_cost<NUM: CloneableNum>(
             _index,
             branch,
         );
+
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
         (_index, entering_arc) = 
 
-        //Pivot rules choice
-        __find_block_search(&edges.out_base, &edges, &nodes, _index.expect(""), _block_size);
+        _find_block_search(
+            &edges.out_base,
+            &edges,
+            &nodes,
+            _index.expect(""),
+            _block_size,
+        );
 
-        // _par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
+        //_par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
 
         //_find_best_arc(&edges, &nodes);
         //_par_find_best_arc(&edges, &nodes, thread_nb);

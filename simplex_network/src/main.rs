@@ -5,7 +5,7 @@ use petgraph::graph::*;
 use rand::Rng;
 use std::time::SystemTime;
 
-const GRID_SIZE: i32 = 300;
+const GRID_SIZE: i32 = 500;
 
 fn main() {
     //let args: Vec<String> = std::env::args().collect();
@@ -43,6 +43,7 @@ fn main() {
         );
     }
 
+    
     for i in 1..GRID_SIZE {
         vertical_node.clear();
         for j in 1..GRID_SIZE + 1 {
@@ -72,7 +73,7 @@ fn main() {
     }
 
     let sink = graph.add_node((GRID_SIZE * GRID_SIZE + 1) as u32);
-    for i in (GRID_SIZE * (GRID_SIZE - 1) + 1)..(GRID_SIZE * GRID_SIZE) + 1 {
+    for i in (GRID_SIZE * (GRID_SIZE - 1) + 1)..(GRID_SIZE * GRID_SIZE)+1 {
         graph.add_edge(
             NodeIndex::new(i as usize),
             sink,
