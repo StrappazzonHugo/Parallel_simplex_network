@@ -858,8 +858,12 @@ fn _find_first_arc<NUM: CloneableNum>(
     (None, None)
 }
 
+///////////////////////////////
+/// SEQUENTIAL BLOCK SEARCH ///
+///////////////////////////////
+
 //Block_search basic_version
-fn __find_block_search<NUM: CloneableNum>(
+fn _find_block_search_v1<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
@@ -917,6 +921,266 @@ fn __find_block_search<NUM: CloneableNum>(
     (None, None)
 }
 
+fn _find_block_search_v2<NUM: CloneableNum>(
+    out_base: &Vec<usize>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+    mut index: usize,
+    block_size: usize,
+    //return (arc_index, arc_id)
+) -> (Option<usize>, Option<usize>) {
+    let (mut cand_index, mut cand_id): (Option<usize>, Option<usize>) = (None, None);
+    let mut nb_block_checked = 0;
+    while nb_block_checked < (out_base.len() / block_size) + 1 {
+        nb_block_checked += 1;
+        let Some((arc_index, arc_id, rc)) = out_base[index..]
+            .iter()
+            .chain(&out_base[..index])
+            .enumerate()
+            .take(block_size)
+            .map(|(pos, &arc)| {
+                (pos, arc, unsafe {
+                    *edges.state.get_unchecked(arc)
+                        * (*edges.cost.get_unchecked(arc)
+                            - *nodes
+                                .potential
+                                .get_unchecked(*edges.source.get_unchecked(arc))
+                            + *nodes
+                                .potential
+                                .get_unchecked(*edges.target.get_unchecked(arc)))
+                })
+            })
+            .min_by(|(_, _, rca), (_, _, rcb)| rca.partial_cmp(&rcb).unwrap())
+        else {
+            unreachable!()
+        };
+        if rc < zero() {
+            let new_index = index + arc_index;
+            if new_index >= out_base.len() {
+                (cand_index, cand_id) = (Some(new_index - out_base.len()), Some(arc_id));
+                break;
+            } else {
+                (cand_index, cand_id) = (Some(new_index), Some(arc_id));
+                break;
+            }
+        } else {
+            index = if index + block_size >= out_base.len() {
+                0
+            } else {
+                index + block_size
+            };
+        }
+    }
+    (cand_index, cand_id)
+}
+
+/*
+unsafe fn _best_eligible_in_block<NUM: CloneableNum>(
+    block: &Vec<usize>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+) -> Option<(usize, usize)> {
+    let (best_index, rc) = block
+        .iter()
+        .enumerate()
+        .map(|(index, &arc)| {
+            (
+                index,
+                *edges.state.get_unchecked(arc)
+                    * (*edges.cost.get_unchecked(arc)
+                        - *nodes
+                            .potential
+                            .get_unchecked(*edges.source.get_unchecked(arc))
+                        + *nodes
+                            .potential
+                            .get_unchecked(*edges.target.get_unchecked(arc))),
+            )
+        })
+        .min_by(|x, y| x.1.partial_cmp(&y.1).unwrap())
+        .expect("found");
+    if rc >= zero() {
+        None
+    } else {
+        Some((best_index, block[best_index]))
+    }
+}*/
+
+/////////////////////////////
+/// PARALLEL BLOCK SEARCH ///
+/////////////////////////////
+
+fn _parallel_block_search_v1<NUM: CloneableNum>(
+    out_base: &Vec<usize>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+    mut index: Option<usize>,
+    block_size: usize,
+    thread_nb: usize,
+    //return (arc_index, arc_id)
+) -> (Option<usize>, Option<usize>) {
+    let mut _iteration = 0;
+
+    while (thread_nb * block_size * _iteration) <= (out_base.len() + thread_nb * block_size) {
+        let mut mins = vec![zero(); thread_nb];
+        let mut arcs: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); thread_nb];
+        _iteration += 1;
+        let chunks: &Vec<&[usize]> = &out_base[index.unwrap()..].chunks(block_size).collect();
+        std::thread::scope(|s| {
+            for (i, (rc_cand, candidate)) in std::iter::zip(&mut mins, &mut arcs).enumerate() {
+                if i >= chunks.len() {
+                    *rc_cand = zero();
+                    *candidate = (None, None);
+                    continue;
+                };
+                s.spawn(move || {
+                    for (_index, &arc) in chunks[i].iter().enumerate() {
+                        let rc = unsafe {
+                            *edges.state.get_unchecked(arc)
+                                * (*edges.cost.get_unchecked(arc)
+                                    - *nodes
+                                        .potential
+                                        .get_unchecked(*edges.source.get_unchecked(arc))
+                                    + *nodes
+                                        .potential
+                                        .get_unchecked(*edges.target.get_unchecked(arc)))
+                        };
+                        if rc < *rc_cand {
+                            *rc_cand = rc;
+                            *candidate =
+                                (Some(block_size * i + _index + index.unwrap()), Some(arc));
+                        }
+                    }
+                });
+            }
+        });
+        let mut min = (0, mins[0]);
+        for (i, rc) in mins.iter().enumerate() {
+            if *rc < min.1 {
+                min = (i, *rc);
+            }
+        }
+        if min.1 < zero::<NUM>() {
+            return arcs[min.0];
+        }
+        index = Some(index.unwrap() + block_size * thread_nb);
+        if index.unwrap() >= out_base.len() {
+            index = Some(0);
+        }
+    }
+    (None, None)
+}
+
+unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
+    out_base: &Vec<usize>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+    mut index: usize,
+    block_size: usize,
+    thread_nb: usize,
+) -> (Option<usize>, Option<usize>) {
+    let mut block_number = 0;
+    let mut arc_index = None;
+
+    while block_number * block_size <= out_base.len() {
+        let (index_, rc_entering_arc) = out_base
+            .par_iter()
+            .enumerate()
+            .skip(index)
+            .chain(out_base[..index].par_iter().enumerate())
+            .take(block_size)
+            .map(|(pos, &arc)| {
+                (
+                    pos,
+                    *edges.state.get_unchecked(arc)
+                        * (*edges.cost.get_unchecked(arc)
+                            - *nodes
+                                .potential
+                                .get_unchecked(*edges.source.get_unchecked(arc))
+                            + *nodes
+                                .potential
+                                .get_unchecked(*edges.target.get_unchecked(arc))),
+                )
+            })
+            .min_by(|&x, &y| x.1.partial_cmp(&y.1).unwrap())
+            .unwrap();
+        if rc_entering_arc >= zero::<NUM>() {
+            arc_index = None
+        } else {
+            arc_index = Some(index_)
+        }
+
+        if arc_index.is_none() {
+            index += block_size;
+            block_number += 1;
+            if index > out_base.len() {
+                index = 0;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if arc_index.is_none() {
+        (None, None)
+    } else {
+        (arc_index, Some(out_base[arc_index.unwrap()]))
+    }
+}
+
+fn _parallel_block_search_v3<NUM: CloneableNum>(
+    out_base: &Vec<usize>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+    mut index: usize,
+    block_size: usize,
+    //return (arc_index, arc_id)
+) -> (Option<usize>, Option<usize>) {
+    let (mut cand_index, mut cand_id): (Option<usize>, Option<usize>) = (None, None);
+    let mut nb_block_checked = 0;
+    while nb_block_checked < (out_base.len() / block_size) + 1 {
+        nb_block_checked += 1;
+        let candidate:Option<(usize, usize, NUM)> = //(arc_index, arc_id, rc)
+            out_base[index..]
+            .par_iter()
+            .chain(&out_base[..index])
+            .enumerate()
+            .take(block_size)
+            .map(|(pos, &arc)| {
+                (pos, arc, unsafe {
+                    *edges.state.get_unchecked(arc)
+                        * (*edges.cost.get_unchecked(arc)
+                            - *nodes
+                                .potential
+                                .get_unchecked(*edges.source.get_unchecked(arc))
+                            + *nodes
+                                .potential
+                                .get_unchecked(*edges.target.get_unchecked(arc)))
+                })
+            })
+            .filter(|(_,_,rc)| *rc < zero())
+            .min_by(|(_, _, rca), (_, _, rcb)| rca.partial_cmp(&rcb).unwrap());
+
+        if candidate.is_some() {
+            let new_index = index + candidate.unwrap().0;
+            if new_index >= out_base.len() {
+                (cand_index, cand_id) =
+                    (Some(new_index - out_base.len()), Some(candidate.unwrap().1));
+                break;
+            } else {
+                (cand_index, cand_id) = (Some(new_index), Some(candidate.unwrap().1));
+                break;
+            }
+        } else {
+            index = if index + block_size >= out_base.len() {
+                0
+            } else {
+                index + block_size
+            };
+        }
+    }
+    (cand_index, cand_id)
+}
+
 /*
 fn _find_start<NUM: CloneableNum>(
     out_base: &Vec<usize>,
@@ -965,135 +1229,19 @@ fn _find_start<NUM: CloneableNum>(
         })
 }*/
 
-//#[inline(never)]
-fn _find_block_search<NUM: CloneableNum>(
-    out_base: &Vec<usize>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    mut index: usize,
-    block_size: usize,
-    //return (arc_index, arc_id)
-) -> (Option<usize>, Option<usize>) {
-    // let i = find_start(out_base, edges, nodes, index);
-    let (mut cand_index, mut cand_id): (Option<usize>, Option<usize>) = (None, None);
-    let mut nb_block_checked = 0;
-    while nb_block_checked < (out_base.len() / block_size) + 1 {
-        nb_block_checked += 1;
-        let Some((arc_index, arc_id, rc)) = out_base[index..]
-            .par_iter()
-            .chain(&out_base[..index])
-            .enumerate()
-            .take(block_size)
-            .map(|(pos, &arc)| {
-                (pos, arc, unsafe {
-                    *edges.state.get_unchecked(arc)
-                        * (*edges.cost.get_unchecked(arc)
-                            - *nodes
-                                .potential
-                                .get_unchecked(*edges.source.get_unchecked(arc))
-                            + *nodes
-                                .potential
-                                .get_unchecked(*edges.target.get_unchecked(arc)))
-                })
-            })
-            .min_by(|(_, _, rca), (_, _, rcb)| rca.partial_cmp(&rcb).unwrap())
-        else {
-            unreachable!()
-        };
-        if rc < zero() {
-            let new_index = index + arc_index;
-            if new_index >= out_base.len() {
-                (cand_index, cand_id) = (Some(new_index - out_base.len()), Some(arc_id));
-                break;
-            } else {
-                (cand_index, cand_id) = (Some(new_index), Some(arc_id));
-                break;
-            }
-        } else {
-            index = if index + block_size >= out_base.len() {
-                0
-            } else {
-                index + block_size
-            };
-        }
-    }
-    (cand_index, cand_id)
-}
-
-fn _par_block_search<NUM: CloneableNum>(
-    out_base: &Vec<usize>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    mut index: Option<usize>,
-    block_size: usize,
-    thread_nb: usize,
-    //return (arc_index, arc_id)
-) -> (Option<usize>, Option<usize>) {
-    let mut _iteration = 0;
-
-    while (thread_nb * block_size * _iteration) <= (out_base.len() + thread_nb * block_size) {
-        let mut mins = vec![zero(); thread_nb];
-        let mut arcs: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); thread_nb];
-        _iteration += 1;
-        let chunks: &Vec<&[usize]> = &out_base[index.unwrap()..].chunks(block_size).collect();
-        std::thread::scope(|s| {
-            for (i, (rc_cand, candidate)) in std::iter::zip(&mut mins, &mut arcs).enumerate() {
-                if i >= chunks.len() {
-                    *rc_cand = zero();
-                    *candidate = (None, None);
-                    continue;
-                };
-                s.spawn(move || {
-                    for (_index, &arc) in chunks[i].iter().enumerate() {
-                        let rc = unsafe {
-                    *edges.state.get_unchecked(arc)
-                        * (*edges.cost.get_unchecked(arc)
-                            - *nodes
-                                .potential
-                                .get_unchecked(*edges.source.get_unchecked(arc))
-                            + *nodes
-                                .potential
-                                .get_unchecked(*edges.target.get_unchecked(arc)))
-                };
-                        if rc < *rc_cand {
-                            *rc_cand = rc;
-                            *candidate =
-                                (Some(block_size * i + _index + index.unwrap()), Some(arc));
-                        }
-                    }
-                });
-            }
-        });
-        let mut min = (0, mins[0]);
-        for (i, rc) in mins.iter().enumerate() {
-            if *rc < min.1 {
-                min = (i, *rc);
-            }
-        }
-        if min.1 < zero::<NUM>() {
-            return arcs[min.0];
-        }
-        index = Some(index.unwrap() + block_size * thread_nb);
-        if index.unwrap() >= out_base.len() {
-            index = Some(0);
-        }
-    }
-    (None, None)
-}
-
 //main algorithm function
 pub fn min_cost<NUM: CloneableNum>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 30) as usize;
+    let _block_size = (edges.out_base.len() / 40) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
 
     (_index, entering_arc) = _find_best_arc(&edges, &nodes);
-    let _thread_nb = 8;
+    let _thread_nb = 2;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
@@ -1113,18 +1261,23 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) = 
-
-        _find_block_search(
+        (_index, entering_arc) = unsafe {
+            _parallel_block_search_v2(
+                &edges.out_base,
+                &edges,
+                &nodes,
+                _index.unwrap(),
+                _block_size,
+                _thread_nb,
+            )
+        };
+        /*_find_block_search_v2(
             &edges.out_base,
             &edges,
             &nodes,
             _index.expect(""),
             _block_size,
-        );
-
-        //_par_block_search(&edges.out_base, &edges, &nodes, _index, _block_size, _thread_nb);
-
+        );*/
         //_find_best_arc(&edges, &nodes);
         //_par_find_best_arc(&edges, &nodes, thread_nb);
 
