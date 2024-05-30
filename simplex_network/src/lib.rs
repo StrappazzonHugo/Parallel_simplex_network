@@ -7,9 +7,9 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
-use std::time::SystemTime;
-//use petgraph::dot::*;
 use rayon::prelude::*;
+//use std::time::SystemTime;
+//use petgraph::dot::*;
 use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
@@ -755,7 +755,7 @@ fn get_reduced_cost_edgeindex<NUM: CloneableNum>(
 ///////////////////////
 
 //Best Eligible arc
-fn _find_best_arc<NUM: CloneableNum>(
+fn _best_arc<NUM: CloneableNum>(
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
 ) -> (Option<usize>, Option<usize>) {
@@ -801,7 +801,7 @@ fn _find_best_arc<NUM: CloneableNum>(
 }
 
 //Parallel Best Eligible arc
-fn _par_find_best_arc<NUM: CloneableNum>(
+fn _par_best_arc_v1<NUM: CloneableNum>(
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
     thread_nb: usize,
@@ -876,18 +876,17 @@ fn _find_first_arc<NUM: CloneableNum>(
 ///////////////////////////////
 
 //Block_search basic_version
-fn _find_block_search_v1<NUM: CloneableNum>(
+fn _block_search_v1<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
     mut index: usize,
     block_size: usize,
     //return (arc_index, arc_id)
-) -> (Option<usize>, Option<usize>, NUM) {
+) -> (Option<usize>, Option<usize>) {
     let mut min: NUM = zero();
     let mut entering_arc: Option<usize> = None;
     let mut nb_block_checked = 0;
-    let mut rc = zero();
     //let start = SystemTime::now();
     while nb_block_checked < (out_base.len() / block_size) + 1 {
         nb_block_checked += 1;
@@ -925,19 +924,19 @@ fn _find_block_search_v1<NUM: CloneableNum>(
                     println!("Error: {e:?}");
                 }
             }*/
-            rc = edges.state[entering_arc.unwrap()]
+            /*rc = edges.state[entering_arc.unwrap()]
                 * (edges.cost[entering_arc.unwrap()]
                     - nodes.potential[edges.source[entering_arc.unwrap()]]
                     + nodes.potential[edges.target[entering_arc.unwrap()]]);
-            println!("{:?}", rc);
-            return (Some(index), entering_arc, rc);
+            println!("{:?}", rc);*/
+            return (Some(index), entering_arc);
         }
         index = index + block_size;
         if index > out_base.len() {
             index = 0;
         }
     }
-    (None, None, rc)
+    (None, None)
 }
 
 fn _find_block_search_v2<NUM: CloneableNum>(
@@ -1039,7 +1038,7 @@ fn _parallel_block_search_v1<NUM: CloneableNum>(
         nb_block_checked += 1;
 
         entering_arc = out_base[index..(index + std::cmp::min(block_size, out_base.len() - index))]
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(pos, &arc)| {
                 let rcplus = unsafe {
@@ -1087,7 +1086,7 @@ unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
     nodes: &Nodes<NUM>,
     mut index: usize,
     block_size: usize,
-    thread_nb: usize,
+    _thread_nb: usize,
 ) -> (Option<usize>, Option<usize>) {
     let mut block_number = 0;
     let mut arc_index = None;
@@ -1246,17 +1245,16 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 20) as usize;
+    let _block_size = (edges.out_base.len() / 30) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
-    let mut mean_rc:NUM = zero();
-    (_index, entering_arc) = _find_best_arc(&edges, &nodes);
-    /*let _thread_nb = 1;
+    (_index, entering_arc) = _best_arc(&edges, &nodes);
+    let _thread_nb = 8;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
-        .unwrap();*/
+        .unwrap();
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
@@ -1271,16 +1269,17 @@ pub fn min_cost<NUM: CloneableNum>(
         );
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
-        let current_rc;
-        (_index, entering_arc, current_rc) = _find_block_search_v1(
+        (_index, entering_arc) = _par_best_arc_v1(&edges, &nodes, _thread_nb);
+
+        //_best_arc(&edges, &nodes);
+        /*_block_search_v1(
             &edges.out_base,
             &edges,
             &nodes,
             _index.expect(""),
             _block_size,
-        );
-        mean_rc += current_rc;
-        //_find_best_arc(&edges, &nodes);
+        );*/
+        //println!("{:?}", (edges.source[leaving_arc], edges.target[leaving_arc]));
 
         /*_parallel_block_search_v1(
             &edges.out_base,
@@ -1290,7 +1289,6 @@ pub fn min_cost<NUM: CloneableNum>(
             _block_size,
         );*/
 
-        //_par_find_best_arc(&edges, &nodes, thread_nb);
 
         //_find_first_arc(&edges, &mut nodes, _index);
         _iteration += 1;
