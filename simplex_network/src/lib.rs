@@ -9,7 +9,7 @@ use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
 use rayon::prelude::*;
 //use std::time::SystemTime;
-//use petgraph::dot::*;
+use petgraph::dot::*;
 use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
@@ -78,16 +78,34 @@ fn initialization<'a, NUM: CloneableNum>(
         .find(|&x| (graph.node_weight(x).unwrap() == &max_node_id)) // SINK_ID
         .unwrap();
 
+    println!("sink_id = {:?}", sink_id);
     let source_id = graph
         .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &0)) // SINK_ID
+        .find(|&x| (graph.node_weight(x).unwrap() == &1048577)) // SINK_ID
         .unwrap();
 
-    let mut big_value: NUM = zero();
-    for _ in 0..100 {
-        big_value += demand;
-    }
+    println!("source_id = {:?}", source_id);
+    let mut big_value: NUM;
+    big_value = num_traits::Bounded::max_value();
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
+    big_value = big_value / (one::<NUM>() + one());
 
+    println!("big_value = {:?}", big_value);
     let mut edge_tree: Vec<usize> = vec![0; graph.node_count() + 1];
 
     let artificial_root = graph.add_node(graph.node_count() as u32);
@@ -888,7 +906,7 @@ fn _block_search_v1<NUM: CloneableNum>(
     let mut entering_arc: Option<usize> = None;
     let mut nb_block_checked = 0;
     //let start = SystemTime::now();
-    while nb_block_checked < (out_base.len() / block_size) + 1 {
+    while nb_block_checked <= (out_base.len() / block_size) + 1 {
         nb_block_checked += 1;
         for i in index..(index + std::cmp::min(block_size, out_base.len() - index)) {
             let arc = unsafe { *edges.out_base.get_unchecked(i) };
@@ -939,7 +957,7 @@ fn _block_search_v1<NUM: CloneableNum>(
     (None, None)
 }
 
-fn _find_block_search_v2<NUM: CloneableNum>(
+fn _block_search_v2<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
@@ -1022,6 +1040,7 @@ unsafe fn _best_eligible_in_block<NUM: CloneableNum>(
 /// PARALLEL BLOCK SEARCH ///
 /////////////////////////////
 
+//parallel iterator inside of the block perf are fine
 fn _parallel_block_search_v1<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
@@ -1034,7 +1053,7 @@ fn _parallel_block_search_v1<NUM: CloneableNum>(
     let mut nb_block_checked = 0;
 
     //let start = SystemTime::now();
-    while nb_block_checked < (out_base.len() / block_size) + 1 {
+    while nb_block_checked <= (out_base.len() / block_size) + 1 {
         nb_block_checked += 1;
 
         entering_arc = out_base[index..(index + std::cmp::min(block_size, out_base.len() - index))]
@@ -1055,10 +1074,10 @@ fn _parallel_block_search_v1<NUM: CloneableNum>(
                 let s: NUM = unsafe { *edges.state.get_unchecked(arc) };
                 (pos, arc, (s * (rcplus - rcminus)))
             })
-            .filter(|(_, _, rc)| *rc < zero())
             .min_by(|(_, _, rc1), (_, _, rc2)| (rc1).partial_cmp(&(rc2)).unwrap());
+        //.filter(|(_, _, rc)| *rc < zero())
 
-        if entering_arc.is_some() {
+        if entering_arc.is_some() && entering_arc.unwrap().2 < zero() {
             /*match start.elapsed() {
                 Ok(elapsed) => {
                     println!("{:?}", elapsed.as_nanos());
@@ -1080,13 +1099,13 @@ fn _parallel_block_search_v1<NUM: CloneableNum>(
     (None, None)
 }
 
+//use of iterator to generate block
 unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
     mut index: usize,
     block_size: usize,
-    _thread_nb: usize,
 ) -> (Option<usize>, Option<usize>) {
     let mut block_number = 0;
     let mut arc_index = None;
@@ -1137,6 +1156,7 @@ unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
     }
 }
 
+//Same search than V2 but use of filter -> Bad performance
 fn _parallel_block_search_v3<NUM: CloneableNum>(
     out_base: &Vec<usize>,
     edges: &Edges<NUM>,
@@ -1245,12 +1265,12 @@ pub fn min_cost<NUM: CloneableNum>(
     demand: NUM,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 30) as usize;
+    let _block_size = (edges.out_base.len() / 10384) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
     (_index, entering_arc) = _best_arc(&edges, &nodes);
-    let _thread_nb = 8;
+    let _thread_nb = 4;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
@@ -1259,6 +1279,7 @@ pub fn min_cost<NUM: CloneableNum>(
         let (leaving_arc, branch) =
             _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
 
+        //println!("entering_arc {:?}", (edges.source[entering_arc.unwrap()], edges.target[entering_arc.unwrap()]));
         update_sptree(
             &mut edges,
             &mut nodes,
@@ -1269,40 +1290,46 @@ pub fn min_cost<NUM: CloneableNum>(
         );
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
-        (_index, entering_arc) = _par_best_arc_v1(&edges, &nodes, _thread_nb);
-
-        //_best_arc(&edges, &nodes);
-        /*_block_search_v1(
+        (_index, entering_arc) = _block_search_v1(
             &edges.out_base,
             &edges,
             &nodes,
             _index.expect(""),
             _block_size,
-        );*/
-        //println!("{:?}", (edges.source[leaving_arc], edges.target[leaving_arc]));
+        );
+
+        /**/
 
         /*_parallel_block_search_v1(
             &edges.out_base,
-            &edges
+            &edges,
             &nodes,
             _index.unwrap(),
             _block_size,
         );*/
 
+        //_best_arc(&edges, &nodes);
+
+        //_par_best_arc_v1(&edges, &nodes, _thread_nb);
+
+        //println!("leaving arc {:?}", (edges.source[leaving_arc], edges.target[leaving_arc]));
 
         //_find_first_arc(&edges, &mut nodes, _index);
         _iteration += 1;
     }
     println!("iterations : {:?}", _iteration);
+    //println!("{:?}", Dot::new(&graph));
+    graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
-    edges
-        .flow
-        .iter()
-        .enumerate()
-        .for_each(|(index, &x)| cost += x * edges.cost[index]);
+    let mut total_flow: NUM = zero();
     graph.clone().edge_references().for_each(|x| {
-        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()]
+        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()];
+        cost += edges.flow[x.id().index()] * edges.cost[x.id().index()];
     });
-    println!("total cost = {:?}", cost);
+    let sink_id = graph.node_count() - 1;
+    graph
+        .edges_directed(NodeIndex::new(sink_id), Incoming)
+        .for_each(|x| total_flow += edges.flow[x.id().index()]);
+    println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
     graph
 }
