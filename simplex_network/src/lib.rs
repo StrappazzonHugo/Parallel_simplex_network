@@ -9,8 +9,8 @@ use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
 use rayon::prelude::*;
 //use std::time::SystemTime;
-use petgraph::dot::*;
-use rayon::ThreadPoolBuilder;
+//use petgraph::dot::*;
+//use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
 struct Edges<NUM: CloneableNum> {
@@ -69,74 +69,69 @@ impl CloneableNum for f64 {}
 //Initialization with artificial root
 fn initialization<'a, NUM: CloneableNum>(
     graph: &'a mut DiGraph<u32, CustomEdgeIndices<NUM>>,
-    demand: NUM,
+    sources: Vec<(usize, NUM)>, //(node_id, demand)
+    sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> (Nodes<NUM>, Edges<NUM>) {
-    let max_node_id: u32 = (graph.node_count() - 1) as u32;
+    //println!("source_id = {:?}", sources);
+    //println!("sink_id = {:?}", sinks);
 
-    let sink_id = graph
-        .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &max_node_id)) // SINK_ID
-        .unwrap();
-
-    println!("sink_id = {:?}", sink_id);
-    let source_id = graph
-        .node_indices()
-        .find(|&x| (graph.node_weight(x).unwrap() == &1048577)) // SINK_ID
-        .unwrap();
-
-    println!("source_id = {:?}", source_id);
-    let mut big_value: NUM;
-    big_value = num_traits::Bounded::max_value();
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-    big_value = big_value / (one::<NUM>() + one());
-
-    println!("big_value = {:?}", big_value);
+    let mut big_value: NUM = num_traits::Bounded::max_value();
+    big_value = big_value / ((one::<NUM>() + one()) + (one::<NUM>() + one()));
+    //big_value = MAX_NUM/4     --arbitrary big value
     let mut edge_tree: Vec<usize> = vec![0; graph.node_count() + 1];
 
     let artificial_root = graph.add_node(graph.node_count() as u32);
+    sources.clone().into_iter().for_each(|(index, demand)| {
+        let source_id = graph
+            .node_indices()
+            .find(|&x| (graph.node_weight(x).unwrap() == &(index as u32))) // SOURCE_ID
+            .unwrap();
+        let arc = graph.add_edge(
+            source_id,
+            artificial_root,
+            CustomEdgeIndices {
+                cost: big_value,
+                capacity: big_value,
+                flow: demand,
+            },
+        );
+        edge_tree[source_id.index()] = arc.index();
+    });
+
+    sinks.clone().into_iter().for_each(|(index, demand)| {
+        let sink_id = graph
+            .node_indices()
+            .find(|&x| (graph.node_weight(x).unwrap() == &(index as u32))) // SINK_ID
+            .unwrap();
+        let arc = graph.add_edge(
+            artificial_root,
+            sink_id,
+            CustomEdgeIndices {
+                cost: big_value,
+                capacity: big_value,
+                flow: zero::<NUM>() - demand,
+            },
+        );
+        edge_tree[sink_id.index()] = arc.index();
+    });
+
+    let mut total_supply_sources: NUM = zero();
+    let mut total_supply_sinks: NUM = zero();
+    sources
+        .iter()
+        .for_each(|(_, demand)| total_supply_sources += *demand);
+    sinks
+        .iter()
+        .for_each(|(_, demand)| total_supply_sinks += *demand);
+    println!("total supply sources = {:?}", total_supply_sources);
+    println!("total supply sinks = {:?}", total_supply_sinks);
+
     for node in graph.node_indices() {
         if node == artificial_root {
             continue;
-        }
-        if node == sink_id {
-            let arc = graph.add_edge(
-                artificial_root,
-                node,
-                CustomEdgeIndices {
-                    cost: big_value,
-                    capacity: big_value,
-                    flow: demand,
-                },
-            );
-            edge_tree[node.index()] = arc.index();
-        } else if node == source_id {
-            // SOURCE_ID
-            let arc = graph.add_edge(
-                node,
-                artificial_root,
-                CustomEdgeIndices {
-                    cost: big_value,
-                    capacity: big_value,
-                    flow: demand,
-                },
-            );
-            edge_tree[node.index()] = arc.index();
-        } else {
+        } else if graph.find_edge(artificial_root, node).is_none()
+            && graph.find_edge(node, artificial_root).is_none()
+        {
             let arc = graph.add_edge(
                 node,
                 artificial_root,
@@ -149,7 +144,6 @@ fn initialization<'a, NUM: CloneableNum>(
             edge_tree[node.index()] = arc.index();
         }
     }
-
     let potentials: Vec<NUM> = compute_node_potentials(graph);
 
     let mut thread_id: Vec<usize> = vec![0; graph.node_count()];
@@ -238,7 +232,7 @@ fn compute_node_potentials<'a, NUM: CloneableNum>(
         .edges_directed(NodeIndex::new(graph.node_count() - 1), Outgoing)
         .map(|x| (x.source().index() as u32, x.target().index() as u32, 1f32))
         .collect();
-    edges.push(rest[0]);
+    rest.iter().for_each(|&x| edges.push(x));
 
     let temp_graph = Graph::<(), f32, Undirected>::from_edges(edges);
 
@@ -860,7 +854,7 @@ fn _par_best_arc_v1<NUM: CloneableNum>(
 }
 
 //First eligible
-fn _find_first_arc<NUM: CloneableNum>(
+fn _first_arc<NUM: CloneableNum>(
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
     mut index: Option<usize>,
@@ -1262,19 +1256,21 @@ fn _find_start<NUM: CloneableNum>(
 //main algorithm function
 pub fn min_cost<NUM: CloneableNum>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
-    demand: NUM,
+    sources: Vec<(usize, NUM)>, //(node_id, demand)
+    sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, demand);
-    let _block_size = (edges.out_base.len() / 10384) as usize;
+    let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
+    let _block_size = (edges.out_base.len() / 2896) as usize;
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
+    println!("Initialized...");
     (_index, entering_arc) = _best_arc(&edges, &nodes);
-    let _thread_nb = 4;
+    /*let _thread_nb = 4;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
-        .unwrap();
+        .unwrap();*/
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
@@ -1290,6 +1286,7 @@ pub fn min_cost<NUM: CloneableNum>(
         );
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
+
         (_index, entering_arc) = _block_search_v1(
             &edges.out_base,
             &edges,
@@ -1298,7 +1295,15 @@ pub fn min_cost<NUM: CloneableNum>(
             _block_size,
         );
 
-        /**/
+        /*_block_search_v1(
+            &edges.out_base,
+            &edges,
+            &nodes,
+            _index.expect(""),
+            _block_size,
+        );*/
+
+        //_first_arc(&edges, &mut nodes, _index);
 
         /*_parallel_block_search_v1(
             &edges.out_base,
@@ -1314,22 +1319,30 @@ pub fn min_cost<NUM: CloneableNum>(
 
         //println!("leaving arc {:?}", (edges.source[leaving_arc], edges.target[leaving_arc]));
 
-        //_find_first_arc(&edges, &mut nodes, _index);
+        //
         _iteration += 1;
+        /*let mut curr_total_flow: NUM = zero();
+        sinks.iter().for_each(|(index, _)| {
+            graph
+                .edges_directed(NodeIndex::new(*index), Incoming)
+                .for_each(|x| curr_total_flow += edges.flow[x.id().index()])
+        });
+        println!("iteration = {:?}", _iteration-1);
+        assert_eq!(init_total_flow, curr_total_flow);*/
     }
     println!("iterations : {:?}", _iteration);
-    //println!("{:?}", Dot::new(&graph));
-    graph.remove_node(NodeIndex::new(graph.node_count() - 1));
+    //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();
     graph.clone().edge_references().for_each(|x| {
         graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()];
         cost += edges.flow[x.id().index()] * edges.cost[x.id().index()];
     });
-    let sink_id = graph.node_count() - 1;
-    graph
-        .edges_directed(NodeIndex::new(sink_id), Incoming)
-        .for_each(|x| total_flow += edges.flow[x.id().index()]);
+    sinks.iter().for_each(|(index, _)| {
+        graph
+            .edges_directed(NodeIndex::new(*index), Incoming)
+            .for_each(|x| total_flow += edges.flow[x.id().index()])
+    });
     println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
     graph
 }

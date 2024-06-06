@@ -8,17 +8,17 @@ fn main() {
     //let args: Vec<String> = std::env::args().collect();
     //let mut rng = rand::thread_rng();
 
-    let graph = parsed_graph();
+    let (graph, sources, sinks) = parsed_graph();
 
     let start = SystemTime::now();
-    let demand: i64 = 16;
     println!(
-        "node nb = {:?}, edge nb = {:?}, demand = {:?}",
+        "node nb = {:?}, edge nb = {:?}",// sources = {:?}, sinks = {:?}",
         graph.node_count(),
         graph.edge_count(),
-        demand
+        //sources,
+        //sinks
     );
-    let _min_cost_flow = min_cost(graph, demand);
+    let _min_cost_flow = min_cost(graph, sources, sinks);
     match start.elapsed() {
         Ok(elapsed) => {
             println!("time = {:?}", (elapsed.as_millis() as f64 / 1000f64) as f64);
