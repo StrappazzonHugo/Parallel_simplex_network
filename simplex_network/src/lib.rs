@@ -10,7 +10,7 @@ use petgraph::stable_graph::IndexType;
 use rayon::prelude::*;
 //use std::time::SystemTime;
 //use petgraph::dot::*;
-//use rayon::ThreadPoolBuilder;
+use rayon::ThreadPoolBuilder;
 
 #[derive(Debug, Clone)]
 struct Edges<NUM: CloneableNum> {
@@ -1259,18 +1259,21 @@ pub fn min_cost<NUM: CloneableNum>(
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
+
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
-    let _block_size = (edges.out_base.len() / 2896) as usize;
+    let factor = 16;
+    let mut _block_size = factor * std::cmp::min((edges.out_base.len() as f64).sqrt() as usize, edges.out_base.len()/100)  as usize;
+    println!("blocksize = {:?}", _block_size);
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
     println!("Initialized...");
     (_index, entering_arc) = _best_arc(&edges, &nodes);
-    /*let _thread_nb = 4;
+    let _thread_nb = 8;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
-        .unwrap();*/
+        .unwrap();
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
@@ -1287,11 +1290,11 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) = _block_search_v1(
+        (_index, entering_arc) = _parallel_block_search_v1(
             &edges.out_base,
             &edges,
             &nodes,
-            _index.expect(""),
+            _index.unwrap(),
             _block_size,
         );
 
@@ -1343,6 +1346,12 @@ pub fn min_cost<NUM: CloneableNum>(
             .edges_directed(NodeIndex::new(*index), Incoming)
             .for_each(|x| total_flow += edges.flow[x.id().index()])
     });
+    sinks.iter().for_each(|(index, _)| {
+        graph
+            .edges_directed(NodeIndex::new(*index), Outgoing)
+            .for_each(|x| total_flow -= edges.flow[x.id().index()])
+    });
+    //println!("{:?}", Dot::new(&graph)); 
     println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
     graph
 }

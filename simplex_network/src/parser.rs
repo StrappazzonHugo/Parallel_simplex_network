@@ -13,7 +13,7 @@ pub fn parsed_graph() -> (
     let file_path = &args[1];
 
     let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
-
+    let mut count = 0;
     let mut graph = DiGraph::<u32, CustomEdgeIndices<i64>>::new();
     let mut sources: Vec<(usize, i64)> = vec![]; //TODO change to general number NUM
     let mut sinks: Vec<(usize, i64)> = vec![]; //TODO change to general number NUM
@@ -34,12 +34,13 @@ pub fn parsed_graph() -> (
             }
         };
         if x.chars().nth(0) == Some('a') {
+            count += 1;
             let line = x.split(' ').collect::<Vec<&str>>()[1..].to_vec();
             let source: usize = line[0].parse::<usize>().unwrap();
             let target: usize = line[1].parse::<usize>().unwrap();
             let capacity: i64 = line[3].parse::<i64>().unwrap();
             let cost: i64 = line[4].parse::<i64>().unwrap();
-            graph.update_edge(
+            graph.add_edge(
                 NodeIndex::new(source),
                 NodeIndex::new(target),
                 CustomEdgeIndices {
