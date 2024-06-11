@@ -290,6 +290,7 @@ fn update_node_potentials<'a, NUM: CloneableNum>(
     }
 }
 
+/*
 //computing delta the amount of flow we can augment through the cycle
 //returning the leaving edge
 fn __compute_flowchange<'a, NUM: CloneableNum>(
@@ -446,7 +447,7 @@ fn __compute_flowchange<'a, NUM: CloneableNum>(
     };
 
     (leaving_arc, branch)
-}
+}*/
 
 fn _compute_flowchange<'a, NUM: CloneableNum>(
     edges: &mut Edges<NUM>,
@@ -1259,17 +1260,22 @@ pub fn min_cost<NUM: CloneableNum>(
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
-    let factor = 16;
-    let mut _block_size = factor * std::cmp::min((edges.out_base.len() as f64).sqrt() as usize, edges.out_base.len()/100)  as usize;
+    let multiply_factor = 1;
+    let divide_factor = 1;
+    let mut _block_size = multiply_factor
+        * std::cmp::min(
+            (edges.out_base.len() as f64).sqrt() as usize,
+            edges.out_base.len() / 100,
+        ) / divide_factor as usize;
     println!("blocksize = {:?}", _block_size);
     let mut _index: Option<usize> = Some(0);
     let mut entering_arc: Option<usize>;
     let mut _iteration = 0;
     println!("Initialized...");
-    (_index, entering_arc) = _best_arc(&edges, &nodes);
-    let _thread_nb = 8;
+    (_index, entering_arc) = _first_arc(&edges, &mut nodes, _index);
+
+    let _thread_nb = 2;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
@@ -1290,11 +1296,11 @@ pub fn min_cost<NUM: CloneableNum>(
 
         update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc);
 
-        (_index, entering_arc) = _parallel_block_search_v1(
+        (_index, entering_arc) = _block_search_v1(
             &edges.out_base,
             &edges,
             &nodes,
-            _index.unwrap(),
+            _index.expect(""),
             _block_size,
         );
 
@@ -1324,14 +1330,6 @@ pub fn min_cost<NUM: CloneableNum>(
 
         //
         _iteration += 1;
-        /*let mut curr_total_flow: NUM = zero();
-        sinks.iter().for_each(|(index, _)| {
-            graph
-                .edges_directed(NodeIndex::new(*index), Incoming)
-                .for_each(|x| curr_total_flow += edges.flow[x.id().index()])
-        });
-        println!("iteration = {:?}", _iteration-1);
-        assert_eq!(init_total_flow, curr_total_flow);*/
     }
     println!("iterations : {:?}", _iteration);
     //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
@@ -1351,7 +1349,7 @@ pub fn min_cost<NUM: CloneableNum>(
             .edges_directed(NodeIndex::new(*index), Outgoing)
             .for_each(|x| total_flow -= edges.flow[x.id().index()])
     });
-    //println!("{:?}", Dot::new(&graph)); 
+    //println!("{:?}", Dot::new(&graph));
     println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
     graph
 }
