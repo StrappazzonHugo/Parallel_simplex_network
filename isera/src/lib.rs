@@ -1261,8 +1261,11 @@ pub fn min_cost<NUM: CloneableNum>(
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, mut edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
+
+    let _thread_nb = 1;
     let multiply_factor = 1;
     let divide_factor = 1;
+
     let mut _block_size = multiply_factor
         * std::cmp::min(
             (edges.out_base.len() as f64).sqrt() as usize,
@@ -1275,7 +1278,6 @@ pub fn min_cost<NUM: CloneableNum>(
     println!("Initialized...");
     (_index, entering_arc) = _first_arc(&edges, &mut nodes, _index);
 
-    let _thread_nb = 2;
     ThreadPoolBuilder::new()
         .num_threads(_thread_nb)
         .build_global()
