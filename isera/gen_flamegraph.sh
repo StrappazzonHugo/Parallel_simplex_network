@@ -2,11 +2,11 @@
 #
 cargo build --release
 if [ "$#" -eq 1 ]; then
-    perf record --call-graph dwarf target/release/main $1
+    perf record --call-graph dwarf target/release/isera $1
 fi
 
 if [ "$#" -eq 0 ]; then
-    perf record --call-graph dwarf target/release/main
+    perf record --call-graph dwarf target/releaseisera/
 fi
 
 perf script | ~/.cargo/bin/inferno-collapse-perf > stacks.folded
