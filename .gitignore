@@ -57,3 +57,5 @@ Cargo.lock
 
 #Flamegraph
 *.svg
+*.data
+*.old
