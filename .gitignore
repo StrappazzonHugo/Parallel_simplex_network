@@ -55,5 +55,7 @@ Cargo.lock
 *.out
 *.app
 
-# Flamegraph
+#Flamegraph
 *.svg
+*.data
+*.old
