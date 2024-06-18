@@ -8,6 +8,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
 use rayon::prelude::*;
+use std::any::*;
 //use std::time::SystemTime;
 //use petgraph::dot::*;
 use rayon::ThreadPoolBuilder;
@@ -92,16 +93,36 @@ impl CloneableNum for f32 {}
 impl CloneableNum for f64 {}
 
 //Initialization with artificial root
-fn initialization<'a, NUM: CloneableNum>(
+fn initialization<'a, NUM: CloneableNum + 'static>(
     graph: &'a mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> (Nodes<NUM>, Edges<NUM>) {
     //println!("source_id = {:?}", sources);
     //println!("sink_id = {:?}", sinks);
+    let mut total_supply_sources: NUM = zero();
+    let mut total_supply_sinks: NUM = zero();
+    sources
+        .iter()
+        .for_each(|(_, demand)| total_supply_sources += *demand);
+    sinks
+        .iter()
+        .for_each(|(_, demand)| total_supply_sinks += *demand);
+    println!("total supply sources = {:?}", total_supply_sources);
+    println!("total supply sinks = {:?}", total_supply_sinks);
 
-    let mut big_value: NUM = num_traits::Bounded::max_value();
-    big_value = big_value / ((one::<NUM>() + one()) + (one::<NUM>() + one()));
+    let mut big_value: NUM;
+    if TypeId::of::<NUM>() == TypeId::of::<f32>() || TypeId::of::<NUM>() == TypeId::of::<f64>() {
+        big_value = one::<NUM>() + one();
+        for _ in 1..53 {
+            big_value = big_value * (one::<NUM>() + one());
+        }
+    } else {
+        big_value = num_traits::Bounded::max_value();
+        big_value = big_value / ((one::<NUM>() + one()) + (one::<NUM>() + one()));
+    }
+    println!("big_value = {:?}", big_value);
+
     //big_value = MAX_NUM/4     --arbitrary big value
     let mut edge_tree: Vec<usize> = vec![0; graph.node_count() + 1];
 
@@ -139,17 +160,6 @@ fn initialization<'a, NUM: CloneableNum>(
         );
         edge_tree[sink_id.index()] = arc.index();
     });
-
-    let mut total_supply_sources: NUM = zero();
-    let mut total_supply_sinks: NUM = zero();
-    sources
-        .iter()
-        .for_each(|(_, demand)| total_supply_sources += *demand);
-    sinks
-        .iter()
-        .for_each(|(_, demand)| total_supply_sinks += *demand);
-    println!("total supply sources = {:?}", total_supply_sources);
-    println!("total supply sinks = {:?}", total_supply_sinks);
 
     for node in graph.node_indices() {
         if node == artificial_root {
@@ -1195,7 +1205,7 @@ unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
 }
 
 //main algorithm function
-pub fn min_cost<NUM: CloneableNum>(
+pub fn min_cost<NUM: CloneableNum + 'static>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
@@ -1223,9 +1233,9 @@ pub fn min_cost<NUM: CloneableNum>(
         FirstEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
 
     ThreadPoolBuilder::new()
-    .num_threads(thread_nb)
-    .build_global()
-    .unwrap();
+        .num_threads(thread_nb)
+        .build_global()
+        .unwrap();
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
             _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
@@ -1256,14 +1266,28 @@ pub fn min_cost<NUM: CloneableNum>(
                 (_index, entering_arc) =
                     FirstEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
             }
-            PivotRules::ParallelBlockSearch => {}
-            PivotRules::ParallelBestEligible => {}
+            PivotRules::ParallelBlockSearch => {
+                (_index, entering_arc) = ParallelBlockSearch::find_entering_arc(
+                    &edges,
+                    &nodes,
+                    _index.unwrap(),
+                    _block_size,
+                )
+            }
+            PivotRules::ParallelBestEligible => {
+                (_index, entering_arc) = ParallelBestEligible::find_entering_arc(
+                    &edges,
+                    &nodes,
+                    _index.unwrap(),
+                    _block_size,
+                )
+            }
         }
 
         _iteration += 1;
     }
     println!("iterations : {:?}", _iteration);
-    graph.remove_node(NodeIndex::new(graph.node_count() - 1));
+    //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();
     graph.clone().edge_references().for_each(|x| {
