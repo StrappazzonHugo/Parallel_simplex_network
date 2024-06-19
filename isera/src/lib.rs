@@ -15,7 +15,7 @@ use rayon::ThreadPoolBuilder;
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
-struct Edges<NUM: CloneableNum> {
+pub struct Edges<NUM: CloneableNum> {
     out_base: Vec<usize>,
     source: Vec<usize>,
     target: Vec<usize>,
@@ -26,7 +26,7 @@ struct Edges<NUM: CloneableNum> {
 }
 
 #[derive(Debug, Clone)]
-struct Nodes<NUM: CloneableNum> {
+pub struct Nodes<NUM: CloneableNum> {
     potential: Vec<NUM>,
     thread: Vec<usize>,
     revthread: Vec<usize>,
@@ -114,7 +114,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     let mut big_value: NUM;
     if TypeId::of::<NUM>() == TypeId::of::<f32>() || TypeId::of::<NUM>() == TypeId::of::<f64>() {
         big_value = one::<NUM>() + one();
-        for _ in 1..53 {
+        for _ in 1..52 {
             big_value = big_value * (one::<NUM>() + one());
         }
     } else {
@@ -1307,4 +1307,109 @@ pub fn min_cost<NUM: CloneableNum + 'static>(
     //println!("{:?}", Dot::new(&graph));
     println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
     graph
+}
+
+pub fn min_cost_from_state<NUM: CloneableNum + 'static>(
+    graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
+    edges_state: &Edges<NUM>,
+    nodes_state: &Nodes<NUM>,
+    sinks: Vec<(usize, NUM)>,   //vec![(node_id, demand)]
+    pivotrule: PivotRules,
+    thread_nb: usize,
+) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
+    let mut edges = edges_state.clone();
+    let mut nodes = nodes_state.clone();
+    let multiply_factor = 1;
+    let divide_factor = 1;
+
+    let mut _block_size = multiply_factor
+        * std::cmp::min(
+            (edges.out_base.len() as f64).sqrt() as usize,
+            edges.out_base.len() / 100,
+        )
+        / divide_factor as usize;
+    println!("blocksize = {:?}", _block_size);
+    let mut _index: Option<usize> = Some(0);
+    let mut entering_arc: Option<usize>;
+    let mut _ite0ration = 0;
+    println!("Initialized...");
+
+    (_index, entering_arc) =
+        FirstEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
+
+    ThreadPoolBuilder::new()
+        .num_threads(thread_nb)
+        .build_global()
+        .unwrap();
+    while entering_arc.is_some() {
+        let (leaving_arc, branch) =
+            _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
+
+        update_sptree(
+            &mut edges,
+            &mut nodes,
+            entering_arc.unwrap(),
+            leaving_arc,
+            _index,
+            branch,
+        );
+
+        unsafe {
+            update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc)
+        };
+
+        match pivotrule {
+            PivotRules::BlockSearch => {
+                (_index, entering_arc) =
+                    BlockSearch::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
+            }
+            PivotRules::BestEligible => {
+                (_index, entering_arc) =
+                    BestEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
+            }
+            PivotRules::FirstEligible => {
+                (_index, entering_arc) =
+                    FirstEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
+            }
+            PivotRules::ParallelBlockSearch => {
+                (_index, entering_arc) = ParallelBlockSearch::find_entering_arc(
+                    &edges,
+                    &nodes,
+                    _index.unwrap(),
+                    _block_size,
+                )
+            }
+            PivotRules::ParallelBestEligible => {
+                (_index, entering_arc) = ParallelBestEligible::find_entering_arc(
+                    &edges,
+                    &nodes,
+                    _index.unwrap(),
+                    _block_size,
+                )
+            }
+        }
+
+        _iteration += 1;
+    }
+    println!("iterations : {:?}", _iteration);
+    //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
+    let mut cost: NUM = zero();
+    let mut total_flow: NUM = zero();
+    graph.clone().edge_references().for_each(|x| {
+        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()];
+        cost += edges.flow[x.id().index()] * edges.cost[x.id().index()];
+    });
+    sinks.iter().for_each(|(index, _)| {
+        graph
+            .edges_directed(NodeIndex::new(*index), Incoming)
+            .for_each(|x| total_flow += edges.flow[x.id().index()])
+    });
+    sinks.iter().for_each(|(index, _)| {
+        graph
+            .edges_directed(NodeIndex::new(*index), Outgoing)
+            .for_each(|x| total_flow -= edges.flow[x.id().index()])
+    });
+    //println!("{:?}", Dot::new(&graph));
+    println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
+    graph.clone()
 }
