@@ -1203,7 +1203,6 @@ unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
     }
 }
 
-//main algorithm function
 pub fn min_cost<NUM: CloneableNum + 'static>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
@@ -1241,6 +1240,7 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static>(
     )
 }
 
+//main algorithm function
 pub fn solve<NUM: CloneableNum + 'static>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges: &Edges<NUM>,
