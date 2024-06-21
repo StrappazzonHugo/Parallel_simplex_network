@@ -658,9 +658,7 @@ fn update_sptree<NUM: CloneableNum>(
     position: Option<usize>,
     branch: usize,
 ) {
-    if entering_arc == leaving_arc {
-        return;
-    }
+    std::debug_assert!(entering_arc != leaving_arc);
     //useful structure init
     let node_nb = nodes.potential.len();
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
