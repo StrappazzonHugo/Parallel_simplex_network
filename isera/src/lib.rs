@@ -1,8 +1,11 @@
+// used for IntoIter<(usize, &i32, &Option<NodeIndex>)
 use itertools::Itertools;
+
 use num_traits::identities::one;
 use num_traits::identities::zero;
 use num_traits::Num;
 use num_traits::Signed;
+
 use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
@@ -1247,13 +1250,11 @@ pub fn solve<NUM: CloneableNum + 'static>(
         )
         / divide_factor as usize;
     println!("blocksize = {:?}", _block_size);
-    let mut _index: Option<usize> = Some(0);
-    let mut entering_arc: Option<usize>;
-    let mut _iteration = 0;
+    let mut iteration = 0;
     println!("Initialized...");
 
-    (_index, entering_arc) =
-        FirstEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
+    let (mut _index, mut entering_arc) =
+        FirstEligible::find_entering_arc(&edges, &nodes, 0, _block_size);
 
     ThreadPoolBuilder::new()
         .num_threads(thread_nb)
@@ -1307,9 +1308,9 @@ pub fn solve<NUM: CloneableNum + 'static>(
             }
         }
 
-        _iteration += 1;
+        iteration += 1;
     }
-    println!("iterations : {:?}", _iteration);
+    println!("iterations : {:?}", iteration);
     //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();

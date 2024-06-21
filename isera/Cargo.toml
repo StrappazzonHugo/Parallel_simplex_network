@@ -10,11 +10,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-debug_print = "1.0.0"
 itertools = "0.12.1"
 num-traits = "0.2.18"
 petgraph = "0.6.4"
-rand = "0.8.5"
 rayon = "1.8.1"
-rustfmt = "0.10.0"
 time = "0.3.34"
