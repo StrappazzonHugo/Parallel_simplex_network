@@ -18,3 +18,11 @@ rand = "0.8.5"
 rayon = "1.8.1"
 rustfmt = "0.10.0"
 time = "0.3.34"
+
+[lib]
+name = "isera"
+path = "src/lib.rs"
+
+[[bin]]
+name = "isera"
+path = "src/main.rs"
