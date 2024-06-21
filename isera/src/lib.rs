@@ -1211,14 +1211,7 @@ pub fn min_cost<NUM: CloneableNum + 'static>(
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (nodes, edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
-    solve(
-        &mut graph,
-        &edges,
-        &nodes,
-        sinks,
-        pivotrule,
-        thread_nb,
-    )
+    solve(&mut graph, &edges, &nodes, sinks, pivotrule, thread_nb)
 }
 
 pub fn min_cost_from_state<NUM: CloneableNum + 'static>(
@@ -1230,14 +1223,7 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static>(
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut edges, mut nodes) = (edges_state.clone(), nodes_state.clone());
-    solve(
-        graph,
-        &mut edges,
-        &mut nodes,
-        sinks,
-        pivotrule,
-        thread_nb,
-    )
+    solve(graph, &mut edges, &mut nodes, sinks, pivotrule, thread_nb)
 }
 
 //main algorithm function

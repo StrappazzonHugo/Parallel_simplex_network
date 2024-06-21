@@ -3,11 +3,14 @@ use petgraph::graph::*;
 use std::env;
 use std::fs;
 
-pub fn parsed_graph<NUM:CloneableNum>() -> (
+pub fn parsed_graph<NUM: CloneableNum>() -> (
     DiGraph<u32, CustomEdgeIndices<NUM>>,
     Vec<(usize, NUM)>, // Vec<(usize, NUM)>
     Vec<(usize, NUM)>, // Vec<(usize, NUM)>
-) where <NUM as std::str::FromStr>::Err: std::fmt::Debug{
+)
+where
+    <NUM as std::str::FromStr>::Err: std::fmt::Debug,
+{
     println!("starting parser...");
     let args: Vec<String> = env::args().collect();
     let file_path = &args[1];
@@ -28,9 +31,15 @@ pub fn parsed_graph<NUM:CloneableNum>() -> (
         if x.chars().nth(0) == Some('n') {
             let line = x.split(' ').collect::<Vec<&str>>()[1..].to_vec();
             if line[1].parse::<NUM>().unwrap().is_negative() {
-                sinks.push((line[0].parse::<usize>().unwrap(), line[1].parse::<NUM>().unwrap())); 
+                sinks.push((
+                    line[0].parse::<usize>().unwrap(),
+                    line[1].parse::<NUM>().unwrap(),
+                ));
             } else {
-                sources.push((line[0].parse::<usize>().unwrap(), line[1].parse::<NUM>().unwrap())); 
+                sources.push((
+                    line[0].parse::<usize>().unwrap(),
+                    line[1].parse::<NUM>().unwrap(),
+                ));
             }
         };
         if x.chars().nth(0) == Some('a') {
