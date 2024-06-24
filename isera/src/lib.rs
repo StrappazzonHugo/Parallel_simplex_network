@@ -1,8 +1,11 @@
+// used for IntoIter<(usize, &i32, &Option<NodeIndex>)
 use itertools::Itertools;
+
 use num_traits::identities::one;
 use num_traits::identities::zero;
 use num_traits::Num;
 use num_traits::Signed;
+
 use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
@@ -650,9 +653,7 @@ fn update_sptree<NUM: CloneableNum>(
     position: Option<usize>,
     branch: usize,
 ) {
-    if entering_arc == leaving_arc {
-        return;
-    }
+    std::debug_assert!(entering_arc != leaving_arc);
     //useful structure init
     let node_nb = nodes.potential.len();
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
@@ -1247,9 +1248,7 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         )
         / divide_factor as usize;
     println!("blocksize = {:?}", _block_size);
-    let mut _index: Option<usize> = Some(0);
-    let mut entering_arc: Option<usize>;
-    let mut _iteration = 0;
+    let mut iteration = 0;
     println!("Initialized...");
 
     (_index, entering_arc) =
@@ -1279,9 +1278,9 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         (_index, entering_arc) =
             pivotrule.find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
 
-        _iteration += 1;
+        iteration += 1;
     }
-    println!("iterations : {:?}", _iteration);
+    println!("iterations : {:?}", iteration);
     //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();
