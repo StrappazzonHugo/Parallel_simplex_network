@@ -237,19 +237,19 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
         let candidate =
             graphstate
                 .out_base
-                .par_iter()
+                .iter()
                 .enumerate()
-                .min_by(|(arc1, _), (arc2, _)| {
-                    get_rc_from_arc(*arc1, edges, nodes, graphstate)
-                        .partial_cmp(&get_rc_from_arc(*arc2, edges, nodes, graphstate))
+                .min_by(|(_ , &arc1), (_, &arc2)| {
+                    get_rc_from_arc(arc1, edges, nodes, graphstate)
+                        .partial_cmp(&get_rc_from_arc(arc2, edges, nodes, graphstate))
                         .unwrap()
                 });
         if candidate.is_some()
-            && get_rc_from_arc(candidate.unwrap().0, edges, nodes, graphstate) < zero()
+            && get_rc_from_arc(*candidate.unwrap().1, edges, nodes, graphstate) < zero()
         {
-            arc = Some(candidate.unwrap().0);
-            index = Some(*candidate.unwrap().1);
-            return (arc, index);
+            index = Some(candidate.unwrap().0);
+            arc = Some(*candidate.unwrap().1);
+            return (index, arc);
         } else {
             (None, None)
         }

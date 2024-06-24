@@ -585,6 +585,9 @@ fn update_sptree<NUM: CloneableNum>(
     branch: bool,
 ) {
     std::debug_assert!(entering_arc != leaving_arc);
+    if leaving_arc == entering_arc {
+        return;
+    }
     //useful structure init
     let node_nb = nodes.potential.len();
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
@@ -834,6 +837,12 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
+    ThreadPoolBuilder::new()
+        .num_threads(thread_nb)
+        .build_global()
+        .unwrap();
+
+
     let (edges, mut nodes, mut graphstate) = (edges.clone(), nodes.clone(), graph_state);
 
     let multiply_factor = 1;
@@ -852,10 +861,7 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     let (mut _index, mut entering_arc) =
         pivotrule.find_entering_arc(&edges, &nodes, &graphstate, 0, _block_size);
 
-    ThreadPoolBuilder::new()
-        .num_threads(thread_nb)
-        .build_global()
-        .unwrap();
+    
 
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
