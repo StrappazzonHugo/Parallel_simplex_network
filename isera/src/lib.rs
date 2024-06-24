@@ -12,6 +12,7 @@ use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
 use rayon::prelude::*;
 use std::any::*;
+use std::marker::PhantomData;
 //use std::time::SystemTime;
 //use petgraph::dot::*;
 use rayon::ThreadPoolBuilder;
@@ -30,6 +31,7 @@ pub struct Edges<NUM: CloneableNum> {
 
 #[derive(Debug, Clone)]
 pub struct Nodes<NUM: CloneableNum> {
+    //TODO node state
     potential: Vec<NUM>,
     thread: Vec<usize>,
     revthread: Vec<usize>,
@@ -45,22 +47,15 @@ pub struct CustomEdgeIndices<NUM: CloneableNum> {
     pub flow: NUM,
 }
 
-pub enum PivotRules {
-    BlockSearch,
-    FirstEligible,
-    BestEligible,
-    ParallelBlockSearch,
-    ParallelBestEligible,
-}
+pub struct BlockSearch<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
+pub struct FirstEligible<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
+pub struct BestEligible<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
+pub struct ParallelBlockSearch<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
+pub struct ParallelBestEligible<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
 
-pub struct BlockSearch {}
-pub struct FirstEligible {}
-pub struct BestEligible {}
-pub struct ParallelBlockSearch {}
-pub struct ParallelBestEligible {}
-
-trait EnteringArc {
-    fn find_entering_arc<NUM: CloneableNum>(
+pub trait PivotRules<NUM: CloneableNum> {
+    fn find_entering_arc(
+        &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
         index: usize,
@@ -831,8 +826,9 @@ fn update_sptree<NUM: CloneableNum>(
 ///////////////////////
 
 //Best Eligible arc
-impl EnteringArc for BestEligible {
-    fn find_entering_arc<NUM: CloneableNum>(
+impl<NUM: CloneableNum> PivotRules<NUM> for BestEligible<NUM> {
+    fn find_entering_arc(
+        &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
         _index: usize,
@@ -872,8 +868,9 @@ impl EnteringArc for BestEligible {
 }
 
 //Parallel Best Eligible arc
-impl EnteringArc for ParallelBestEligible {
-    fn find_entering_arc<NUM: CloneableNum>(
+impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
+    fn find_entering_arc(
+        &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
         _index: usize,
@@ -917,8 +914,9 @@ impl EnteringArc for ParallelBestEligible {
     }
 }
 
-impl EnteringArc for FirstEligible {
-    fn find_entering_arc<NUM: CloneableNum>(
+impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
+    fn find_entering_arc(
+        &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
         index: usize,
@@ -951,8 +949,9 @@ impl EnteringArc for FirstEligible {
 /// SEQUENTIAL BLOCK SEARCH ///
 ///////////////////////////////
 
-impl EnteringArc for BlockSearch {
-    fn find_entering_arc<NUM: CloneableNum>(
+impl<NUM: CloneableNum> PivotRules<NUM> for BlockSearch<NUM> {
+    fn find_entering_arc(
+        &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
         mut index: usize,
@@ -1087,8 +1086,9 @@ unsafe fn _best_eligible_in_block<NUM: CloneableNum>(
 
 //parallel iterator inside of the block perf are fine
 //
-impl EnteringArc for ParallelBlockSearch {
-    fn find_entering_arc<NUM: CloneableNum>(
+impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
+    fn find_entering_arc(
+        &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
         mut index: usize,
@@ -1204,23 +1204,23 @@ unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
     }
 }
 
-pub fn min_cost<NUM: CloneableNum + 'static>(
+pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
-    pivotrule: PivotRules,
+    pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (nodes, edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
     solve(&mut graph, &edges, &nodes, sinks, pivotrule, thread_nb)
 }
 
-pub fn min_cost_from_state<NUM: CloneableNum + 'static>(
+pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges_state: &Edges<NUM>,
     nodes_state: &Nodes<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
-    pivotrule: PivotRules,
+    pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut edges, mut nodes) = (edges_state.clone(), nodes_state.clone());
@@ -1228,12 +1228,12 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static>(
 }
 
 //main algorithm function
-pub fn solve<NUM: CloneableNum + 'static>(
+pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
-    pivotrule: PivotRules,
+    pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut edges, mut nodes) = (edges.clone(), nodes.clone());
@@ -1251,8 +1251,8 @@ pub fn solve<NUM: CloneableNum + 'static>(
     let mut iteration = 0;
     println!("Initialized...");
 
-    let (mut _index, mut entering_arc) =
-        FirstEligible::find_entering_arc(&edges, &nodes, 0, _block_size);
+    (_index, entering_arc) =
+        pivotrule.find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
 
     ThreadPoolBuilder::new()
         .num_threads(thread_nb)
@@ -1275,36 +1275,8 @@ pub fn solve<NUM: CloneableNum + 'static>(
             update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc)
         };
 
-        match pivotrule {
-            PivotRules::BlockSearch => {
-                (_index, entering_arc) =
-                    BlockSearch::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
-            }
-            PivotRules::BestEligible => {
-                (_index, entering_arc) =
-                    BestEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
-            }
-            PivotRules::FirstEligible => {
-                (_index, entering_arc) =
-                    FirstEligible::find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size)
-            }
-            PivotRules::ParallelBlockSearch => {
-                (_index, entering_arc) = ParallelBlockSearch::find_entering_arc(
-                    &edges,
-                    &nodes,
-                    _index.unwrap(),
-                    _block_size,
-                )
-            }
-            PivotRules::ParallelBestEligible => {
-                (_index, entering_arc) = ParallelBestEligible::find_entering_arc(
-                    &edges,
-                    &nodes,
-                    _index.unwrap(),
-                    _block_size,
-                )
-            }
-        }
+        (_index, entering_arc) =
+            pivotrule.find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
 
         iteration += 1;
     }

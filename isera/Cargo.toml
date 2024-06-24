@@ -15,3 +15,11 @@ num-traits = "0.2.18"
 petgraph = "0.6.4"
 rayon = "1.8.1"
 time = "0.3.34"
+
+[lib]
+name = "isera"
+path = "src/lib.rs"
+
+[[bin]]
+name = "isera"
+path = "src/main.rs"
