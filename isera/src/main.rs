@@ -21,8 +21,8 @@ fn main() {
         //sinks
     );
 
-    let pr: BlockSearch<i64> = BlockSearch{  phantom: PhantomData };
-    let _min_cost_flow = min_cost(graph, sources, sinks, pr, 1);
+    let pr: ParallelBestEligible<i64> = ParallelBestEligible{  phantom: PhantomData };
+    let _min_cost_flow = min_cost(graph, sources, sinks, pr, 8);
     match start.elapsed() {
         Ok(elapsed) => {
             println!("time = {:?}", (elapsed.as_millis() as f64 / 1000f64) as f64);

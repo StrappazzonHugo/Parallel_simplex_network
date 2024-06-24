@@ -1,7 +1,7 @@
 use crate::basetypes::*;
-use std::marker::PhantomData;
 use num_traits::identities::zero;
 use rayon::prelude::*;
+use std::marker::PhantomData;
 
 pub struct BlockSearch<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
@@ -29,7 +29,6 @@ pub trait PivotRules<NUM: CloneableNum> {
         block_size: usize,
     ) -> (Option<usize>, Option<usize>);
 }
-
 
 ///////////////////////
 ///// Pivot rules /////
@@ -77,7 +76,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BestEligible<NUM> {
         (index, entering_arc)
     }
 }
-
 
 ///////////////////////////////
 /// SEQUENTIAL BLOCK SEARCH ///
@@ -135,7 +133,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BlockSearch<NUM> {
         (None, None)
     }
 }
-
 
 /////////////////////////////
 /// PARALLEL BLOCK SEARCH ///
@@ -204,9 +201,63 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
     }
 }
 
+fn get_rc_from_arc<NUM: CloneableNum>(
+    arc: usize,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+    graphstate: &GraphState<NUM>,
+) -> NUM {
+    let rcplus = unsafe {
+        *edges.cost.get_unchecked(arc)
+            + *nodes
+                .potential
+                .get_unchecked(*edges.target.get_unchecked(arc))
+    };
+    let rcminus = unsafe {
+        *nodes
+            .potential
+            .get_unchecked(*edges.source.get_unchecked(arc))
+    };
+    let s: NUM = unsafe { *graphstate.state.get_unchecked(arc) };
+    s * (rcplus - rcminus)
+}
+
 //Parallel Best Eligible arc
 impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
     fn find_entering_arc(
+        &self,
+        edges: &Edges<NUM>,
+        nodes: &Nodes<NUM>,
+        graphstate: &GraphState<NUM>,
+        _index: usize,
+        _block_size: usize,
+        //return (arc_index, arc_id)
+    ) -> (Option<usize>, Option<usize>) {
+        let (arc, index);
+        let candidate =
+            graphstate
+                .out_base
+                .par_iter()
+                .enumerate()
+                .min_by(|(arc1, _), (arc2, _)| {
+                    get_rc_from_arc(*arc1, edges, nodes, graphstate)
+                        .partial_cmp(&get_rc_from_arc(*arc2, edges, nodes, graphstate))
+                        .unwrap()
+                });
+        if candidate.is_some()
+            && get_rc_from_arc(candidate.unwrap().0, edges, nodes, graphstate) < zero()
+        {
+            arc = Some(candidate.unwrap().0);
+            index = Some(*candidate.unwrap().1);
+            return (arc, index);
+        } else {
+            (None, None)
+        }
+    }
+}
+
+/*
+fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
         nodes: &Nodes<NUM>,
@@ -227,7 +278,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
                         let rc = graphstate.state[arc]
                             * (edges.cost[arc] - nodes.potential[edges.source[arc]]
                                 + nodes.potential[edges.target[arc]]);
-                        //println!("testrc = {:?}", rc);
                         if rc < *rc_cand {
                             *rc_cand = rc;
                             *candidate = (Some(chunk_size * i + index), Some(arc));
@@ -250,7 +300,8 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
         }
         (None, None)
     }
-}
+
+*/
 
 impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
     fn find_entering_arc(
@@ -283,6 +334,3 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
         (None, None)
     }
 }
-
-
-

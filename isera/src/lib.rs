@@ -849,8 +849,8 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     let mut iteration = 0;
     println!("Initialized...");
 
-    (_index, entering_arc) =
-        pivotrule.find_entering_arc(&edges, &nodes, &graphstate, _index.unwrap(), _block_size);
+    let (mut _index, mut entering_arc) =
+        pivotrule.find_entering_arc(&edges, &nodes, &graphstate, 0, _block_size);
 
     ThreadPoolBuilder::new()
         .num_threads(thread_nb)
