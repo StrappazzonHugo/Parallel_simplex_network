@@ -1,13 +1,16 @@
-use isera::*;
 use petgraph::graph::*;
 use std::env;
 use std::fs;
+use isera::basetypes::*;
 
-pub fn parsed_graph<NUM:CloneableNum>() -> (
+pub fn parsed_graph<NUM: CloneableNum>() -> (
     DiGraph<u32, CustomEdgeIndices<NUM>>,
     Vec<(usize, NUM)>, // Vec<(usize, NUM)>
     Vec<(usize, NUM)>, // Vec<(usize, NUM)>
-) where <NUM as std::str::FromStr>::Err: std::fmt::Debug{
+)
+where
+    <NUM as std::str::FromStr>::Err: std::fmt::Debug,
+{
     println!("starting parser...");
     let args: Vec<String> = env::args().collect();
     let file_path = &args[1];
@@ -15,8 +18,8 @@ pub fn parsed_graph<NUM:CloneableNum>() -> (
     let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
     let mut count = 0;
     let mut graph = DiGraph::<u32, CustomEdgeIndices<NUM>>::new();
-    let mut sources: Vec<(usize, NUM)> = vec![]; //TODO change to general number NUM
-    let mut sinks: Vec<(usize, NUM)> = vec![]; //TODO change to general number NUM
+    let mut sources: Vec<(usize, NUM)> = vec![];
+    let mut sinks: Vec<(usize, NUM)> = vec![];
 
     contents.lines().for_each(|x| {
         if x.chars().nth(0) == Some('p') {
@@ -28,9 +31,15 @@ pub fn parsed_graph<NUM:CloneableNum>() -> (
         if x.chars().nth(0) == Some('n') {
             let line = x.split(' ').collect::<Vec<&str>>()[1..].to_vec();
             if line[1].parse::<NUM>().unwrap().is_negative() {
-                sinks.push((line[0].parse::<usize>().unwrap(), line[1].parse::<NUM>().unwrap())); 
+                sinks.push((
+                    line[0].parse::<usize>().unwrap(),
+                    line[1].parse::<NUM>().unwrap(),
+                ));
             } else {
-                sources.push((line[0].parse::<usize>().unwrap(), line[1].parse::<NUM>().unwrap())); 
+                sources.push((
+                    line[0].parse::<usize>().unwrap(),
+                    line[1].parse::<NUM>().unwrap(),
+                ));
             }
         };
         if x.chars().nth(0) == Some('a') {

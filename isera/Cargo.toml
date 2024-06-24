@@ -26,3 +26,12 @@ path = "src/lib.rs"
 [[bin]]
 name = "isera"
 path = "src/main.rs"
+
+[[basetype]]
+name = "isera"
+path = "src/basetypes.rs"
+
+
+[[pivotrules]]
+name = "isera"
+path = "src/pivotrules.rs"
