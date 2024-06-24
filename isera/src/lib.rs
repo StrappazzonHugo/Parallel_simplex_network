@@ -1,101 +1,26 @@
-// used for IntoIter<(usize, &i32, &Option<NodeIndex>)
+use crate::basetypes::*;
+use pivotrules::*;
+
 use itertools::Itertools;
 
 use num_traits::identities::one;
 use num_traits::identities::zero;
-use num_traits::Num;
-use num_traits::Signed;
-
 use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
-use rayon::prelude::*;
-use std::any::*;
-use std::marker::PhantomData;
-//use std::time::SystemTime;
-//use petgraph::dot::*;
 use rayon::ThreadPoolBuilder;
-use std::str::FromStr;
+use std::any::*;
 
-#[derive(Debug, Clone)]
-pub struct Edges<NUM: CloneableNum> {
-    out_base: Vec<usize>,
-    source: Vec<usize>,
-    target: Vec<usize>,
-    flow: Vec<NUM>,
-    cost: Vec<NUM>,
-    capacity: Vec<NUM>,
-    state: Vec<NUM>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Nodes<NUM: CloneableNum> {
-    //TODO node state
-    potential: Vec<NUM>,
-    thread: Vec<usize>,
-    revthread: Vec<usize>,
-    predecessor: Vec<Option<usize>>,
-    depth: Vec<usize>,
-    edge_tree: Vec<usize>,
-}
-
-#[derive(Clone, Debug, Copy, PartialEq, PartialOrd)]
-pub struct CustomEdgeIndices<NUM: CloneableNum> {
-    pub cost: NUM,
-    pub capacity: NUM,
-    pub flow: NUM,
-}
-
-pub struct BlockSearch<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
-pub struct FirstEligible<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
-pub struct BestEligible<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
-pub struct ParallelBlockSearch<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
-pub struct ParallelBestEligible<NUM: CloneableNum> {pub phantom: PhantomData<NUM>}
-
-pub trait PivotRules<NUM: CloneableNum> {
-    fn find_entering_arc(
-        &self,
-        edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
-        index: usize,
-        block_size: usize,
-    ) -> (Option<usize>, Option<usize>);
-}
-
-pub trait CloneableNum:
-    Num
-    + PartialOrd
-    + FromStr
-    + Clone
-    + Copy
-    + PartialEq
-    + std::fmt::Debug
-    + num_traits::bounds::Bounded
-    + std::ops::AddAssign
-    + std::ops::SubAssign
-    + Sync
-    + Send
-    + Sized
-    + Signed
-{
-}
-
-impl CloneableNum for i8 {}
-impl CloneableNum for i16 {}
-impl CloneableNum for i32 {}
-impl CloneableNum for i64 {}
-impl CloneableNum for i128 {}
-impl CloneableNum for isize {}
-impl CloneableNum for f32 {}
-impl CloneableNum for f64 {}
+pub mod basetypes;
+pub mod pivotrules;
 
 //Initialization with artificial root
 fn initialization<'a, NUM: CloneableNum + 'static>(
     graph: &'a mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
-) -> (Nodes<NUM>, Edges<NUM>) {
+) -> (Nodes<NUM>, Edges<NUM>, GraphState<NUM>) {
     //println!("source_id = {:?}", sources);
     //println!("sink_id = {:?}", sinks);
     let mut total_supply_sources: NUM = zero();
@@ -120,7 +45,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
         big_value = big_value / ((one::<NUM>() + one()) + (one::<NUM>() + one()));
     }
 
-    //big_value = MAX_NUM/4     --arbitrary big value
+    //big_value --arbitrary big value
     let mut edge_tree: Vec<usize> = vec![0; graph.node_count() + 1];
 
     let artificial_root = graph.add_node(graph.node_count() as u32);
@@ -232,15 +157,19 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     });
 
     let edges: Edges<NUM> = Edges {
-        out_base: (outbase),
         source: (source),
         target: (target),
-        flow: (flow),
         cost: (cost),
         capacity: (capacity),
+    };
+
+    let graphstate: GraphState<NUM> = GraphState {
+        out_base: (outbase),
+        flow: (flow),
         state: (state),
     };
-    (nodes, edges)
+
+    (nodes, edges, graphstate)
 }
 
 //New version of compute_node_potentials using tree form of sptree.t to compute them in order
@@ -491,18 +420,19 @@ fn __compute_flowchange<'a, NUM: CloneableNum>(
 }*/
 
 fn _compute_flowchange<'a, NUM: CloneableNum>(
-    edges: &mut Edges<NUM>,
-    nodes: &mut Nodes<NUM>,
+    edges: &Edges<NUM>,
+    nodes: &Nodes<NUM>,
+    graphstate: &mut GraphState<NUM>,
     entering_arc: usize,
-) -> (usize, usize) {
+) -> (usize, bool) {
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
-    let up_restricted = edges.flow[entering_arc] != zero();
+    let up_restricted = graphstate.flow[entering_arc] != zero();
 
     let mut current_i = i;
     let mut current_j = j;
 
     let mut min_delta = if up_restricted {
-        (edges.flow[entering_arc], entering_arc)
+        (graphstate.flow[entering_arc], entering_arc)
     } else {
         (edges.capacity[entering_arc], entering_arc)
     };
@@ -517,18 +447,18 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
         if nodes.depth[current_i] < nodes.depth[current_j] {
             if up_restricted {
                 if current_j == edges.target[arc_j] {
-                    delta = (edges.capacity[arc_j] - edges.flow[arc_j], arc_j);
+                    delta = (edges.capacity[arc_j] - graphstate.flow[arc_j], arc_j);
                 } else {
-                    delta = (edges.flow[arc_j], arc_j);
+                    delta = (graphstate.flow[arc_j], arc_j);
                 }
                 if delta.0 < min_delta_j.0 {
                     min_delta_j = delta
                 };
             } else {
                 if current_j == edges.source[arc_j] {
-                    delta = (edges.capacity[arc_j] - edges.flow[arc_j], arc_j);
+                    delta = (edges.capacity[arc_j] - graphstate.flow[arc_j], arc_j);
                 } else {
-                    delta = (edges.flow[nodes.edge_tree[current_j]], arc_j);
+                    delta = (graphstate.flow[nodes.edge_tree[current_j]], arc_j);
                 }
                 if delta.0 <= min_delta_j.0 {
                     min_delta_j = delta
@@ -538,18 +468,18 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
         } else {
             if up_restricted {
                 if current_i == edges.source[arc_i] {
-                    delta = (edges.capacity[arc_i] - edges.flow[arc_i], arc_i);
+                    delta = (edges.capacity[arc_i] - graphstate.flow[arc_i], arc_i);
                 } else {
-                    delta = (edges.flow[arc_i], arc_i);
+                    delta = (graphstate.flow[arc_i], arc_i);
                 }
                 if delta.0 <= min_delta_i.0 {
                     min_delta_i = delta
                 };
             } else {
                 if current_i == edges.target[arc_i] {
-                    delta = (edges.capacity[arc_i] - edges.flow[arc_i], arc_i);
+                    delta = (edges.capacity[arc_i] - graphstate.flow[arc_i], arc_i);
                 } else {
-                    delta = (edges.flow[arc_i], arc_i);
+                    delta = (graphstate.flow[arc_i], arc_i);
                 }
                 if delta.0 < min_delta_i.0 {
                     min_delta_i = delta
@@ -559,21 +489,21 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
         }
     }
 
-    let mut branch: usize = 0;
+    let mut branch: bool = false;
     if min_delta.0 > min_delta_i.0 {
         min_delta = min_delta_i;
-        branch = 1;
+        branch = true;
     }
     if min_delta.0 > min_delta_j.0 {
         min_delta = min_delta_j;
-        branch = 2;
+        branch = false;
     }
     if min_delta_j.0 == min_delta_i.0 {
         min_delta = if up_restricted {
-            branch = 2;
+            branch = false;
             min_delta_j
         } else {
-            branch = 1;
+            branch = true;
             min_delta_i
         }
     }
@@ -582,14 +512,14 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
         current_i = i;
         current_j = j;
         if up_restricted {
-            edges.flow[entering_arc] -= min_delta.0;
+            graphstate.flow[entering_arc] -= min_delta.0;
         } else {
-            edges.flow[entering_arc] += min_delta.0;
+            graphstate.flow[entering_arc] += min_delta.0;
         }
-        if edges.flow[entering_arc] == zero() {
-            edges.state[entering_arc] = one();
-        } else if edges.flow[entering_arc] == edges.capacity[entering_arc] {
-            edges.state[entering_arc] = zero::<NUM>() - one();
+        if graphstate.flow[entering_arc] == zero() {
+            graphstate.state[entering_arc] = one();
+        } else if graphstate.flow[entering_arc] == edges.capacity[entering_arc] {
+            graphstate.state[entering_arc] = zero::<NUM>() - one();
         }
         while current_j != current_i {
             let arc_i = nodes.edge_tree[current_i];
@@ -597,41 +527,41 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
             if nodes.depth[current_i] < nodes.depth[current_j] {
                 if up_restricted {
                     if current_j == edges.target[arc_j] {
-                        edges.flow[arc_j] += min_delta.0;
+                        graphstate.flow[arc_j] += min_delta.0;
                     } else {
-                        edges.flow[arc_j] -= min_delta.0;
+                        graphstate.flow[arc_j] -= min_delta.0;
                     }
                 } else {
                     if current_j == edges.source[arc_j] {
-                        edges.flow[arc_j] += min_delta.0;
+                        graphstate.flow[arc_j] += min_delta.0;
                     } else {
-                        edges.flow[arc_j] -= min_delta.0;
+                        graphstate.flow[arc_j] -= min_delta.0;
                     }
                 }
-                if edges.flow[arc_j] == zero() {
-                    edges.state[arc_j] = one();
-                } else if edges.flow[arc_j] == edges.capacity[arc_j] {
-                    edges.state[arc_j] = zero::<NUM>() - one();
+                if graphstate.flow[arc_j] == zero() {
+                    graphstate.state[arc_j] = one();
+                } else if graphstate.flow[arc_j] == edges.capacity[arc_j] {
+                    graphstate.state[arc_j] = zero::<NUM>() - one();
                 }
                 current_j = nodes.predecessor[current_j].unwrap();
             } else {
                 if up_restricted {
                     if current_i == edges.source[arc_i] {
-                        edges.flow[arc_i] += min_delta.0;
+                        graphstate.flow[arc_i] += min_delta.0;
                     } else {
-                        edges.flow[arc_i] -= min_delta.0;
+                        graphstate.flow[arc_i] -= min_delta.0;
                     }
                 } else {
                     if current_i == edges.target[arc_i] {
-                        edges.flow[arc_i] += min_delta.0;
+                        graphstate.flow[arc_i] += min_delta.0;
                     } else {
-                        edges.flow[arc_i] -= min_delta.0;
+                        graphstate.flow[arc_i] -= min_delta.0;
                     }
                 }
-                if edges.flow[arc_i] == zero() {
-                    edges.state[arc_i] = one();
-                } else if edges.flow[arc_i] == edges.capacity[arc_i] {
-                    edges.state[arc_i] = zero::<NUM>() - one();
+                if graphstate.flow[arc_i] == zero() {
+                    graphstate.state[arc_i] = one();
+                } else if graphstate.flow[arc_i] == edges.capacity[arc_i] {
+                    graphstate.state[arc_i] = zero::<NUM>() - one();
                 }
                 current_i = nodes.predecessor[current_i].unwrap();
             }
@@ -646,12 +576,13 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
 * to another.
 */
 fn update_sptree<NUM: CloneableNum>(
-    edges: &mut Edges<NUM>,
+    edges: &Edges<NUM>,
     nodes: &mut Nodes<NUM>,
+    graphstate: &mut GraphState<NUM>,
     entering_arc: usize,
     leaving_arc: usize,
     position: Option<usize>,
-    branch: usize,
+    branch: bool,
 ) {
     std::debug_assert!(entering_arc != leaving_arc);
     //useful structure init
@@ -675,11 +606,10 @@ fn update_sptree<NUM: CloneableNum>(
     //vectors contain id of arcs from i/j to root or removed arc
     let mut path_from_i: Vec<usize>;
     let mut path_from_j: Vec<usize>;
-    if branch == 1 {
+    if branch {
         path_from_i = vec![i; nodes.depth[i] + 1 - cutting_depth];
         path_from_j = vec![j; nodes.depth[j] + 1];
     } else {
-        // branch == 1
         path_from_i = vec![i; nodes.depth[i] + 1];
         path_from_j = vec![j; nodes.depth[j] + 1 - cutting_depth];
     }
@@ -818,235 +748,7 @@ fn update_sptree<NUM: CloneableNum>(
         }
     });
 
-    edges.out_base[position.unwrap()] = leaving_arc;
-}
-
-///////////////////////
-///// Pivot rules /////
-///////////////////////
-
-//Best Eligible arc
-impl<NUM: CloneableNum> PivotRules<NUM> for BestEligible<NUM> {
-    fn find_entering_arc(
-        &self,
-        edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
-        _index: usize,
-        _block_size: usize,
-        //return (arc_index, arc_id)
-    ) -> (Option<usize>, Option<usize>) {
-        let mut min = zero();
-        let mut entering_arc = None;
-        let mut index = None;
-        for i in 0..edges.out_base.len() {
-            let arc = unsafe { *edges.out_base.get_unchecked(i) };
-            let rcplus = unsafe {
-                *edges.cost.get_unchecked(arc)
-                    + *nodes
-                        .potential
-                        .get_unchecked(*edges.target.get_unchecked(arc))
-            };
-            let rcminus = unsafe {
-                *nodes
-                    .potential
-                    .get_unchecked(*edges.source.get_unchecked(arc))
-            };
-            let s: NUM = unsafe { *edges.state.get_unchecked(arc) };
-            if (rcplus < rcminus) ^ (s.is_negative()) {
-                let rc = s * (rcplus - rcminus);
-                if rc < min {
-                    min = rc;
-                    entering_arc = Some(arc);
-                    index = Some(i);
-                }
-            } else {
-                continue;
-            }
-        }
-        (index, entering_arc)
-    }
-}
-
-//Parallel Best Eligible arc
-impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
-    fn find_entering_arc(
-        &self,
-        edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
-        _index: usize,
-        _block_size: usize,
-        //return (arc_index, arc_id)
-    ) -> (Option<usize>, Option<usize>) {
-        let thread_nb = rayon::current_num_threads();
-        let mut mins = vec![zero(); thread_nb];
-        let mut arcs: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); thread_nb];
-        let chunk_size: usize = (edges.out_base.len() / thread_nb) + 1;
-        let chunks: &Vec<&[usize]> = &edges.out_base.chunks(chunk_size).collect();
-        std::thread::scope(|s| {
-            for (i, (rc_cand, candidate)) in std::iter::zip(&mut mins, &mut arcs).enumerate() {
-                s.spawn(move || {
-                    for (index, &arc) in chunks[i].iter().enumerate() {
-                        let rc = edges.state[arc]
-                            * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                                + nodes.potential[edges.target[arc]]);
-                        //println!("testrc = {:?}", rc);
-                        if rc < *rc_cand {
-                            *rc_cand = rc;
-                            *candidate = (Some(chunk_size * i + index), Some(arc));
-                        }
-                    }
-                });
-            }
-        });
-        let mut min = mins[0];
-        let mut id = 0;
-        for (index, rc) in mins.iter().enumerate() {
-            if rc < &min {
-                min = *rc;
-                id = index;
-            }
-        }
-
-        if min != zero() {
-            return arcs[id];
-        }
-        (None, None)
-    }
-}
-
-impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
-    fn find_entering_arc(
-        &self,
-        edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
-        index: usize,
-        _block_size: usize,
-        //return (arc_index, arc_id)
-    ) -> (Option<usize>, Option<usize>) {
-        for i in index + 1..edges.out_base.len() {
-            let arc = edges.out_base[i];
-            let rc = edges.state[arc]
-                * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                    + nodes.potential[edges.target[arc]]);
-            if rc < zero() {
-                return (Some(i), Some(arc));
-            }
-        }
-        for i in 0..index + 1 {
-            let arc = edges.out_base[i];
-            let rc = edges.state[arc]
-                * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                    + nodes.potential[edges.target[arc]]);
-            if rc < zero() {
-                return (Some(i), Some(arc));
-            }
-        }
-        (None, None)
-    }
-}
-
-///////////////////////////////
-/// SEQUENTIAL BLOCK SEARCH ///
-///////////////////////////////
-
-impl<NUM: CloneableNum> PivotRules<NUM> for BlockSearch<NUM> {
-    fn find_entering_arc(
-        &self,
-        edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
-        mut index: usize,
-        block_size: usize,
-        //return (arc_index, arc_id)
-    ) -> (Option<usize>, Option<usize>) {
-        let mut min: NUM = zero();
-        let mut entering_arc: Option<usize> = None;
-        let mut nb_block_checked = 0;
-        //let start = SystemTime::now();
-        while nb_block_checked <= (edges.out_base.len() / block_size) + 1 {
-            nb_block_checked += 1;
-            for i in index..(index + std::cmp::min(block_size, edges.out_base.len() - index)) {
-                let arc = unsafe { *edges.out_base.get_unchecked(i) };
-                let rcplus = unsafe {
-                    *edges.cost.get_unchecked(arc)
-                        + *nodes
-                            .potential
-                            .get_unchecked(*edges.target.get_unchecked(arc))
-                };
-                let rcminus = unsafe {
-                    *nodes
-                        .potential
-                        .get_unchecked(*edges.source.get_unchecked(arc))
-                };
-                let s: NUM = unsafe { *edges.state.get_unchecked(arc) };
-                if (rcplus < rcminus) ^ (s.is_negative()) {
-                    let rc = s * (rcplus - rcminus);
-                    if rc < min {
-                        min = rc;
-                        entering_arc = Some(arc);
-                        index = i;
-                    }
-                } else {
-                    continue;
-                }
-            }
-            if entering_arc.is_some() {
-                return (Some(index), entering_arc);
-            }
-            index = index + block_size;
-            if index > edges.out_base.len() {
-                index = 0;
-            }
-        }
-        (None, None)
-    }
-}
-
-fn _block_search_v2<NUM: CloneableNum>(
-    out_base: &Vec<usize>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    mut index: usize,
-    block_size: usize,
-    //return (arc_index, arc_id)
-) -> (Option<usize>, Option<usize>) {
-    let (mut cand_index, mut cand_id): (Option<usize>, Option<usize>) = (None, None);
-    let mut nb_block_checked = 0;
-    while nb_block_checked < (out_base.len() / block_size) + 1 {
-        nb_block_checked += 1;
-        let Some((arc_index, arc_id, rc)) = out_base
-            .iter()
-            .enumerate()
-            .cycle()
-            .skip(index)
-            .take(block_size)
-            .map(|(pos, &arc)| {
-                (pos, arc, unsafe {
-                    *edges.state.get_unchecked(arc)
-                        * (*edges.cost.get_unchecked(arc)
-                            - *nodes
-                                .potential
-                                .get_unchecked(*edges.source.get_unchecked(arc))
-                            + *nodes
-                                .potential
-                                .get_unchecked(*edges.target.get_unchecked(arc)))
-                })
-            })
-            .min_by(|(_, _, rca), (_, _, rcb)| rca.partial_cmp(&rcb).unwrap())
-        else {
-            unreachable!()
-        };
-        if rc < zero() {
-            let new_index = arc_index;
-            (cand_index, cand_id) = (Some(new_index), Some(arc_id));
-        } else {
-            index = if index + block_size >= out_base.len() {
-                0
-            } else {
-                index + block_size
-            };
-        }
-    }
-    (cand_index, cand_id)
+    graphstate.out_base[position.unwrap()] = leaving_arc;
 }
 
 /*
@@ -1080,130 +782,6 @@ unsafe fn _best_eligible_in_block<NUM: CloneableNum>(
     }
 }*/
 
-/////////////////////////////
-/// PARALLEL BLOCK SEARCH ///
-/////////////////////////////
-
-//parallel iterator inside of the block perf are fine
-//
-impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
-    fn find_entering_arc(
-        &self,
-        edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
-        mut index: usize,
-        block_size: usize,
-        //return (arc_index, arc_id)
-    ) -> (Option<usize>, Option<usize>) {
-        let mut entering_arc: Option<(usize, usize, NUM)>;
-        let mut nb_block_checked = 0;
-
-        //let start = SystemTime::now();
-        while nb_block_checked <= (edges.out_base.len() / block_size) + 1 {
-            nb_block_checked += 1;
-
-            entering_arc = edges.out_base
-                [index..(index + std::cmp::min(block_size, edges.out_base.len() - index))]
-                .par_iter()
-                .enumerate()
-                .map(|(pos, &arc)| {
-                    let rcplus = unsafe {
-                        *edges.cost.get_unchecked(arc)
-                            + *nodes
-                                .potential
-                                .get_unchecked(*edges.target.get_unchecked(arc))
-                    };
-                    let rcminus = unsafe {
-                        *nodes
-                            .potential
-                            .get_unchecked(*edges.source.get_unchecked(arc))
-                    };
-                    let s: NUM = unsafe { *edges.state.get_unchecked(arc) };
-                    (pos, arc, (s * (rcplus - rcminus)))
-                })
-                .min_by(|(_, _, rc1), (_, _, rc2)| (rc1).partial_cmp(&(rc2)).unwrap());
-            //.filter(|(_, _, rc)| *rc < zero())
-
-            if entering_arc.is_some() && entering_arc.unwrap().2 < zero() {
-                /*match start.elapsed() {
-                    Ok(elapsed) => {
-                        println!("{:?}", elapsed.as_nanos());
-                    }
-                    Err(e) => {
-                        println!("Error: {e:?}");
-                    }
-                }*/
-                return (
-                    Some(index + entering_arc.unwrap().0),
-                    Some(entering_arc.unwrap().1),
-                );
-            }
-            index = index + block_size;
-            if index > edges.out_base.len() {
-                index = 0;
-            }
-        }
-        (None, None)
-    }
-}
-
-//use of iterator to generate block
-unsafe fn _parallel_block_search_v2<NUM: CloneableNum>(
-    out_base: &Vec<usize>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    mut index: usize,
-    block_size: usize,
-) -> (Option<usize>, Option<usize>) {
-    let mut block_number = 0;
-    let mut arc_index = None;
-
-    while block_number * block_size <= out_base.len() {
-        let (index_, rc_entering_arc) = out_base
-            .par_iter()
-            .enumerate()
-            .skip(index)
-            .chain(out_base[..index].par_iter().enumerate())
-            .take(block_size)
-            .map(|(pos, &arc)| {
-                (
-                    pos,
-                    *edges.state.get_unchecked(arc)
-                        * (*edges.cost.get_unchecked(arc)
-                            - *nodes
-                                .potential
-                                .get_unchecked(*edges.source.get_unchecked(arc))
-                            + *nodes
-                                .potential
-                                .get_unchecked(*edges.target.get_unchecked(arc))),
-                )
-            })
-            .min_by(|&x, &y| x.1.partial_cmp(&y.1).unwrap())
-            .unwrap();
-        if rc_entering_arc >= zero::<NUM>() {
-            arc_index = None
-        } else {
-            arc_index = Some(index_)
-        }
-
-        if arc_index.is_none() {
-            index += block_size;
-            block_number += 1;
-            if index > out_base.len() {
-                index = 0;
-            }
-        } else {
-            break;
-        }
-    }
-
-    if arc_index.is_none() {
-        (None, None)
-    } else {
-        (arc_index, Some(out_base[arc_index.unwrap()]))
-    }
-}
-
 pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
@@ -1211,20 +789,39 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let (nodes, edges) = initialization::<NUM>(&mut graph, sources, sinks.clone());
-    solve(&mut graph, &edges, &nodes, sinks, pivotrule, thread_nb)
+    let (mut nodes, edges, mut graphstate) =
+        initialization::<NUM>(&mut graph, sources, sinks.clone());
+    solve(
+        &mut graph,
+        &edges,
+        &mut nodes,
+        &mut graphstate,
+        sinks,
+        pivotrule,
+        thread_nb,
+    )
 }
 
 pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
-    graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
+    mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges_state: &Edges<NUM>,
     nodes_state: &Nodes<NUM>,
+    graph_state: &mut GraphState<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let (mut edges, mut nodes) = (edges_state.clone(), nodes_state.clone());
-    solve(graph, &mut edges, &mut nodes, sinks, pivotrule, thread_nb)
+    let (edges, mut nodes, mut graphstate) =
+        (edges_state.clone(), nodes_state.clone(), graph_state);
+    solve(
+        &mut graph,
+        &edges,
+        &mut nodes,
+        &mut graphstate,
+        sinks,
+        pivotrule,
+        thread_nb,
+    )
 }
 
 //main algorithm function
@@ -1232,19 +829,20 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
+    graph_state: &mut GraphState<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let (mut edges, mut nodes) = (edges.clone(), nodes.clone());
+    let (edges, mut nodes, mut graphstate) = (edges.clone(), nodes.clone(), graph_state);
 
     let multiply_factor = 1;
     let divide_factor = 1;
 
     let mut _block_size = multiply_factor
         * std::cmp::min(
-            (edges.out_base.len() as f64).sqrt() as usize,
-            edges.out_base.len() / 100,
+            (graphstate.out_base.len() as f64).sqrt() as usize,
+            graphstate.out_base.len() / 100,
         )
         / divide_factor as usize;
     println!("blocksize = {:?}", _block_size);
@@ -1252,31 +850,31 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     println!("Initialized...");
 
     (_index, entering_arc) =
-        pivotrule.find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
+        pivotrule.find_entering_arc(&edges, &nodes, &graphstate, _index.unwrap(), _block_size);
 
     ThreadPoolBuilder::new()
         .num_threads(thread_nb)
         .build_global()
         .unwrap();
+
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
-            _compute_flowchange(&mut edges, &mut nodes, entering_arc.unwrap());
+            _compute_flowchange(&edges, &nodes, &mut graphstate, entering_arc.unwrap());
 
         update_sptree(
-            &mut edges,
+            &edges,
             &mut nodes,
+            &mut graphstate,
             entering_arc.unwrap(),
             leaving_arc,
             _index,
             branch,
         );
 
-        unsafe {
-            update_node_potentials(&mut edges, &mut nodes, entering_arc.unwrap(), leaving_arc)
-        };
+        unsafe { update_node_potentials(&edges, &mut nodes, entering_arc.unwrap(), leaving_arc) };
 
         (_index, entering_arc) =
-            pivotrule.find_entering_arc(&edges, &nodes, _index.unwrap(), _block_size);
+            pivotrule.find_entering_arc(&edges, &nodes, &graphstate, _index.unwrap(), _block_size);
 
         iteration += 1;
     }
@@ -1285,18 +883,18 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();
     graph.clone().edge_references().for_each(|x| {
-        graph.edge_weight_mut(x.id()).expect("found").flow = edges.flow[x.id().index()];
-        cost += edges.flow[x.id().index()] * edges.cost[x.id().index()];
+        graph.edge_weight_mut(x.id()).expect("found").flow = graphstate.flow[x.id().index()];
+        cost += graphstate.flow[x.id().index()] * edges.cost[x.id().index()];
     });
     sinks.iter().for_each(|(index, _)| {
         graph
             .edges_directed(NodeIndex::new(*index), Incoming)
-            .for_each(|x| total_flow += edges.flow[x.id().index()])
+            .for_each(|x| total_flow += graphstate.flow[x.id().index()])
     });
     sinks.iter().for_each(|(index, _)| {
         graph
             .edges_directed(NodeIndex::new(*index), Outgoing)
-            .for_each(|x| total_flow -= edges.flow[x.id().index()])
+            .for_each(|x| total_flow -= graphstate.flow[x.id().index()])
     });
     //println!("{:?}", Dot::new(&graph));
     println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
