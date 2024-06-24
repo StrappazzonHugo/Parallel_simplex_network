@@ -14,7 +14,7 @@ fn main() {
 
     let start = SystemTime::now();
     println!(
-        "node nb = {:?}, edge nb = {:?}",// sources = {:?}, sinks = {:?},
+        "node nb = {:?}, edge nb = {:?}", // sources = {:?}, sinks = {:?},
         graph.node_count(),
         graph.edge_count(),
         //sources,
