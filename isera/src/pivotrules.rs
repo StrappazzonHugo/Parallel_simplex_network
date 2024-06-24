@@ -1,7 +1,7 @@
 use crate::basetypes::*;
-use std::marker::PhantomData;
 use num_traits::identities::zero;
 use rayon::prelude::*;
+use std::marker::PhantomData;
 
 pub struct BlockSearch<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
@@ -29,7 +29,6 @@ pub trait PivotRules<NUM: CloneableNum> {
         block_size: usize,
     ) -> (Option<usize>, Option<usize>);
 }
-
 
 ///////////////////////
 ///// Pivot rules /////
@@ -77,7 +76,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BestEligible<NUM> {
         (index, entering_arc)
     }
 }
-
 
 ///////////////////////////////
 /// SEQUENTIAL BLOCK SEARCH ///
@@ -135,7 +133,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BlockSearch<NUM> {
         (None, None)
     }
 }
-
 
 /////////////////////////////
 /// PARALLEL BLOCK SEARCH ///
@@ -283,6 +280,3 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
         (None, None)
     }
 }
-
-
-

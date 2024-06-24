@@ -1,7 +1,7 @@
-use isera::*;
 use isera::pivotrules::*;
-use std::time::SystemTime;
+use isera::*;
 use std::marker::PhantomData;
+use std::time::SystemTime;
 
 use crate::dimacs_parser::parsed_graph;
 mod dimacs_parser;
@@ -21,7 +21,9 @@ fn main() {
         //sinks
     );
 
-    let pr: BlockSearch<i64> = BlockSearch{  phantom: PhantomData };
+    let pr: BlockSearch<i64> = BlockSearch {
+        phantom: PhantomData,
+    };
     let _min_cost_flow = min_cost(graph, sources, sinks, pr, 1);
     match start.elapsed() {
         Ok(elapsed) => {
