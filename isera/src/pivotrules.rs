@@ -323,10 +323,10 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
             }
         } //TODO get_unchecked
         for i in 0..index + 1 {
-            let arc = graphstate.out_base[i];
-            let rc = graphstate.state[arc]
-                * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                    + nodes.potential[edges.target[arc]]);
+            let arc = unsafe {*graphstate.out_base.get_unchecked(i) };
+            let rc = unsafe { *graphstate.state.get_unchecked(arc) 
+                * (*edges.cost.get_unchecked(arc) - *nodes.potential.get_unchecked(*edges.source.get_unchecked(arc))
+                    + *nodes.potential.get_unchecked(*edges.target.get_unchecked(arc)))};
             if rc < zero() {
                 return (Some(i), Some(arc));
             }

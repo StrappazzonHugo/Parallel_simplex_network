@@ -11,9 +11,9 @@ pub fn parsed_graph<NUM: CloneableNum>() -> (
 where
     <NUM as std::str::FromStr>::Err: std::fmt::Debug,
 {
-    println!("starting parser...");
     let args: Vec<String> = env::args().collect();
     let file_path = &args[1];
+    print!("{:?}", file_path);
 
     let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
     let mut count = 0;
