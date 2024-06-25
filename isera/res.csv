@@ -1,0 +1,4 @@
+"/home/hstrappa/Documents/graph/gridgen/gridgen_sr_16a.min", iterations = 744566, flow = 256000, cost = 101024261, time = 67.71, k = 1, nbproc = 2
+"/home/hstrappa/Documents/graph/gridgen/gridgen_sr_16a.min", iterations = 477893, flow = 256000, cost = 101024261, time = 46.177, k = 2, nbproc = 2
+"/home/hstrappa/Documents/graph/gridgen/gridgen_sr_16a.min", iterations = 334172, flow = 256000, cost = 101024261, time = 43.815, k = 4, nbproc = 2
+"/home/hstrappa/Documents/graph/gridgen/gridgen_sr_16a.min", iterations = 269904, flow = 256000, cost = 101024261, time = 54.105, k = 8, nbproc = 2
