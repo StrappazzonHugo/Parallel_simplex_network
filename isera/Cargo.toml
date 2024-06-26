@@ -23,4 +23,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "isera"
 path = "src/main.rs"
-

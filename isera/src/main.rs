@@ -1,7 +1,7 @@
-use isera::*;
 use isera::pivotrules::*;
-use std::time::SystemTime;
+use isera::*;
 use std::marker::PhantomData;
+use std::time::SystemTime;
 use std::env;
 
 use crate::dimacs_parser::parsed_graph;

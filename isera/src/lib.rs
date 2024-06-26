@@ -1,8 +1,7 @@
 use crate::basetypes::*;
+
 use pivotrules::*;
-
 use itertools::Itertools;
-
 use num_traits::identities::one;
 use num_traits::identities::zero;
 use petgraph::algo::bellman_ford;
@@ -582,7 +581,6 @@ fn update_sptree<NUM: CloneableNum>(
     position: Option<usize>,
     branch: bool,
 ) {
-    std::debug_assert!(entering_arc != leaving_arc);
     if leaving_arc == entering_arc {
         return;
     }
