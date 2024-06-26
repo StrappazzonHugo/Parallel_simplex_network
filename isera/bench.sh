@@ -1,7 +1,20 @@
 #!/bin/bash
 
 cargo build --release
-./target/release/isera $1 2 1 >> res.csv 
-./target/release/isera $1 2 2 >> res.csv 
-./target/release/isera $1 2 4 >> res.csv 
-./target/release/isera $1 2 8 >> res.csv 
+
+FILES="$1/*.min"
+for f in $FILES
+do
+  ./target/release/isera $f 1 1 >> res.csv 
+  ./target/release/isera $f 2 1 >> res.csv 
+  ./target/release/isera $f 2 2 >> res.csv 
+  ./target/release/isera $f 4 2 >> res.csv 
+  ./target/release/isera $f 4 4 >> res.csv 
+  ./target/release/isera $f 8 4 >> res.csv 
+  ./target/release/isera $f 8 8 >> res.csv 
+done
+
+
+
+
+

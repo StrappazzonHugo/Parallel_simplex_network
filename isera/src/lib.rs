@@ -830,7 +830,7 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
 }
 
 //main algorithm function
-pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
+fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,

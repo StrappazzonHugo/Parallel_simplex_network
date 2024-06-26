@@ -172,8 +172,13 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
                             .potential
                             .get_unchecked(*edges.source.get_unchecked(arc))
                     };
+
                     let s: NUM = unsafe { *graphstate.state.get_unchecked(arc) };
-                    (pos, arc, (s * (rcplus - rcminus)))
+                    if (rcplus < rcminus) ^ (s.is_negative()) {
+                        (pos, arc, (s * (rcplus - rcminus)))
+                    } else {
+                        (pos, arc, num_traits::one())
+                    }
                 })
                 .min_by(|(_, _, rc1), (_, _, rc2)| (rc1).partial_cmp(&(rc2)).unwrap());
             //.filter(|(_, _, rc)| *rc < zero())
@@ -234,16 +239,15 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
         //return (arc_index, arc_id)
     ) -> (Option<usize>, Option<usize>) {
         let (arc, index);
-        let candidate =
-            graphstate
-                .out_base
-                .iter()
-                .enumerate()
-                .min_by(|(_ , &arc1), (_, &arc2)| {
-                    get_rc_from_arc(arc1, edges, nodes, graphstate)
-                        .partial_cmp(&get_rc_from_arc(arc2, edges, nodes, graphstate))
-                        .unwrap()
-                });
+        let candidate = graphstate
+            .out_base
+            .iter()
+            .enumerate()
+            .min_by(|(_, &arc1), (_, &arc2)| {
+                get_rc_from_arc(arc1, edges, nodes, graphstate)
+                    .partial_cmp(&get_rc_from_arc(arc2, edges, nodes, graphstate))
+                    .unwrap()
+            });
         if candidate.is_some()
             && get_rc_from_arc(*candidate.unwrap().1, edges, nodes, graphstate) < zero()
         {
@@ -323,10 +327,17 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
             }
         } //TODO get_unchecked
         for i in 0..index + 1 {
-            let arc = unsafe {*graphstate.out_base.get_unchecked(i) };
-            let rc = unsafe { *graphstate.state.get_unchecked(arc) 
-                * (*edges.cost.get_unchecked(arc) - *nodes.potential.get_unchecked(*edges.source.get_unchecked(arc))
-                    + *nodes.potential.get_unchecked(*edges.target.get_unchecked(arc)))};
+            let arc = unsafe { *graphstate.out_base.get_unchecked(i) };
+            let rc = unsafe {
+                *graphstate.state.get_unchecked(arc)
+                    * (*edges.cost.get_unchecked(arc)
+                        - *nodes
+                            .potential
+                            .get_unchecked(*edges.source.get_unchecked(arc))
+                        + *nodes
+                            .potential
+                            .get_unchecked(*edges.target.get_unchecked(arc)))
+            };
             if rc < zero() {
                 return (Some(i), Some(arc));
             }

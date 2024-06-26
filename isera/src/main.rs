@@ -18,10 +18,16 @@ fn main() {
 
     let (graph, sources, sinks) = parsed_graph::<i64>();
 
-    let start = SystemTime::now();
+    let seq_bs: BlockSearch<i64> = BlockSearch{  phantom: PhantomData };
+    let par_bs: ParallelBlockSearch<i64> = ParallelBlockSearch{  phantom: PhantomData };
 
-    let pr: ParallelBlockSearch<i64> = ParallelBlockSearch{  phantom: PhantomData };
-    let _min_cost_flow = min_cost(graph, sources, sinks, pr, nbproc, kfactor);
+    let start = SystemTime::now();
+    let _min_cost_flow;
+    if nbproc == 1 {
+        _min_cost_flow = min_cost(graph, sources, sinks, seq_bs, nbproc, kfactor);
+    } else {
+        _min_cost_flow = min_cost(graph, sources, sinks, par_bs, nbproc, kfactor);
+    }
     match start.elapsed() {
         Ok(elapsed) => {
             print!(", time = {:?}, k = {:?}, nbproc = {:?}\n", (elapsed.as_millis() as f64 / 1000f64) as f64, kfactor, nbproc);
