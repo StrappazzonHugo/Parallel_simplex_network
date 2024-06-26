@@ -30,8 +30,6 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     sinks
         .iter()
         .for_each(|(_, demand)| total_supply_sinks += *demand);
-    println!("total supply sources = {:?}", total_supply_sources);
-    println!("total supply sinks = {:?}", total_supply_sinks);
 
     let mut big_value: NUM;
     if TypeId::of::<NUM>() == TypeId::of::<f32>() || TypeId::of::<NUM>() == TypeId::of::<f64>() {
@@ -583,7 +581,7 @@ fn update_sptree<NUM: CloneableNum>(
     position: Option<usize>,
     branch: bool,
 ) {
-    if entering_arc == leaving_arc {
+    if leaving_arc == entering_arc {
         return;
     }
     //useful structure init
@@ -789,6 +787,7 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
     pivotrule: PR,
     thread_nb: usize,
+    scaling: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (mut nodes, edges, mut graphstate) =
         initialization::<NUM>(&mut graph, sources, sinks.clone());
@@ -800,6 +799,7 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         sinks,
         pivotrule,
         thread_nb,
+        scaling,
     )
 }
 
@@ -811,6 +811,7 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
+    scaling: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
     let (edges, mut nodes, mut graphstate) =
         (edges_state.clone(), nodes_state.clone(), graph_state);
@@ -822,11 +823,12 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         sinks,
         pivotrule,
         thread_nb,
+        scaling,
     )
 }
 
 //main algorithm function
-pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
+fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
@@ -834,10 +836,17 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
+    scaling: usize,
 ) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
+    ThreadPoolBuilder::new()
+        .num_threads(thread_nb)
+        .build_global()
+        .unwrap();
+
+
     let (edges, mut nodes, mut graphstate) = (edges.clone(), nodes.clone(), graph_state);
 
-    let multiply_factor = 1;
+    let multiply_factor = scaling;
     let divide_factor = 1;
 
     let mut _block_size = multiply_factor
@@ -846,17 +855,12 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
             graphstate.out_base.len() / 100,
         )
         / divide_factor as usize;
-    println!("blocksize = {:?}", _block_size);
     let mut iteration = 0;
-    println!("Initialized...");
 
     let (mut _index, mut entering_arc) =
         pivotrule.find_entering_arc(&edges, &nodes, &graphstate, 0, _block_size);
 
-    ThreadPoolBuilder::new()
-        .num_threads(thread_nb)
-        .build_global()
-        .unwrap();
+    
 
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
@@ -879,7 +883,7 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
 
         iteration += 1;
     }
-    println!("iterations : {:?}", iteration);
+    print!(", iterations = {:?}", iteration);
     //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();
@@ -898,6 +902,6 @@ pub fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
             .for_each(|x| total_flow -= graphstate.flow[x.id().index()])
     });
     //println!("{:?}", Dot::new(&graph));
-    println!("total flow = {:?}, with cost = {:?}", total_flow, cost);
+    print!(", flow = {:?}, cost = {:?}", total_flow, cost);
     graph.clone()
 }
