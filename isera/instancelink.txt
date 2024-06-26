@@ -1,0 +1,14 @@
+http://lime.cs.elte.hu/~kpeter/data/mcf/gridgraph/grid_long_20a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/gridgraph/grid_square_20a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/netgen_8_20a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/netgen_deg_12a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/netgen_lo_8_20a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/netgen_lo_sr_16a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/netgen_sr_16a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/road/road_flow_06_FL_a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/road/road_flow_07_TX_a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/road/road_paths_06_FL_a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/road/road_paths_07_TX_a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/vision/vision_inv_05_bone_subx_n6c100_a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/vision/vision_prop_05_bone_subx_n6c100_a.min.gz
+http://lime.cs.elte.hu/~kpeter/data/mcf/vision/vision_rnd_05_bone_subx_n6c100_a.min.gz
