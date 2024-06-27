@@ -257,7 +257,6 @@ unsafe fn update_node_potentials<'a, NUM: CloneableNum>(
     }
 }
 
-
 fn _compute_flowchange<'a, NUM: CloneableNum>(
     edges: &Edges<NUM>,
     nodes: &Nodes<NUM>,
@@ -631,50 +630,32 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
-    let (mut nodes, edges, mut graphstate) =
-        initialization::<NUM>(&mut graph, sources, sinks.clone());
-    solve(
-        &mut graph,
-        &edges,
-        &mut nodes,
-        &mut graphstate,
-        sinks,
-        pivotrule,
-        thread_nb,
-        scaling,
-    )
+    let (nodes, edges, graphstate) = initialization::<NUM>(&mut graph, sources, sinks.clone());
+    let state: State<NUM> = State {
+        nodes_state: (nodes),
+        graph_state: (graphstate),
+        edges_state: (edges),
+        status: (Status::DemandGap),
+    };
+
+    solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
 pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
-    edges_state: &Edges<NUM>,
-    nodes_state: &Nodes<NUM>,
-    graph_state: &mut GraphState<NUM>,
+    state: State<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
-    let (edges, mut nodes, mut graphstate) =
-        (edges_state.clone(), nodes_state.clone(), graph_state);
-    solve(
-        &mut graph,
-        &edges,
-        &mut nodes,
-        &mut graphstate,
-        sinks,
-        pivotrule,
-        thread_nb,
-        scaling,
-    )
+    solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
 //main algorithm function
 fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    graph_state: &mut GraphState<NUM>,
+    state: State<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
@@ -685,7 +666,11 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         .build_global()
         .unwrap();
 
-    let (edges, mut nodes, mut graphstate) = (edges.clone(), nodes.clone(), graph_state);
+    let (edges, mut nodes, mut graphstate) = (
+        state.edges_state.clone(),
+        state.nodes_state.clone(),
+        state.graph_state,
+    );
 
     let multiply_factor = scaling;
     let divide_factor = 1;
@@ -741,7 +726,7 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
             .for_each(|x| total_flow -= graphstate.flow[x.id().index()])
     });
     //println!("{:?}", Dot::new(&graph));
-    let mut sink_sum:NUM = zero();
+    let mut sink_sum: NUM = zero();
     sinks.into_iter().for_each(|(_, demand)| sink_sum += demand);
     let status: Status;
     if total_flow == (zero::<NUM>() - sink_sum) {
@@ -750,7 +735,10 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         status = Status::DemandGap;
     }
 
-    print!(", flow = {:?}, cost = {:?}, status = {:?}", total_flow, cost, status);
+    print!(
+        ", flow = {:?}, cost = {:?}, status = {:?}",
+        total_flow, cost, status
+    );
     let state: State<NUM> = State {
         nodes_state: (nodes.clone()),
         graph_state: (graphstate.clone()),
