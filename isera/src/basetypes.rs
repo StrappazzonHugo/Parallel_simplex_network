@@ -70,8 +70,8 @@ pub enum Status {
 
 #[derive(Debug, Clone)]
 pub struct State<NUM: CloneableNum> {
-    pub nodes_state:Nodes<NUM>,
-    pub graph_state:GraphState<NUM>,
-    pub edges_state:Edges<NUM>,
-    pub status:Status, 
+    pub nodes_state: Nodes<NUM>,
+    pub graph_state: GraphState<NUM>,
+    pub edges_state: Edges<NUM>,
+    pub status: Status,
 }
