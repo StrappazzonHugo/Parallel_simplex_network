@@ -47,6 +47,7 @@ pub struct Nodes<NUM: CloneableNum> {
     pub edge_tree: Vec<usize>,
 }
 
+#[derive(Debug, Clone)]
 pub struct GraphState<NUM: CloneableNum> {
     pub out_base: Vec<usize>,
     pub flow: Vec<NUM>,
@@ -58,4 +59,19 @@ pub struct CustomEdgeIndices<NUM: CloneableNum> {
     pub cost: NUM,
     pub capacity: NUM,
     pub flow: NUM,
+}
+
+#[derive(Debug, Clone)]
+pub enum Status {
+    Optimal,
+    DemandGap,
+    Iterationlimited,
+}
+
+#[derive(Debug, Clone)]
+pub struct State<NUM: CloneableNum> {
+    pub nodes_state:Nodes<NUM>,
+    pub graph_state:GraphState<NUM>,
+    pub edges_state:Edges<NUM>,
+    pub status:Status, 
 }
