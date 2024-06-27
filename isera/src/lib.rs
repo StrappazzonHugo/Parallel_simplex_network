@@ -20,8 +20,6 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
 ) -> (Nodes<NUM>, Edges<NUM>, GraphState<NUM>) {
-    //println!("source_id = {:?}", sources);
-    //println!("sink_id = {:?}", sinks);
     let mut total_supply_sources: NUM = zero();
     let mut total_supply_sinks: NUM = zero();
     sources
@@ -42,7 +40,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
         big_value = big_value / ((one::<NUM>() + one()) + (one::<NUM>() + one()));
     }
 
-    //big_value --arbitrary big value
+    // big_value --arbitrary big value
     let mut edge_tree: Vec<usize> = vec![0; graph.node_count() + 1];
 
     let artificial_root = graph.add_node(graph.node_count() as u32);
@@ -708,7 +706,6 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         iteration += 1;
     }
     print!(", iterations = {:?}", iteration);
-    //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     let mut cost: NUM = zero();
     let mut total_flow: NUM = zero();
     graph.clone().edge_references().for_each(|x| {
@@ -725,7 +722,6 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
             .edges_directed(NodeIndex::new(*index), Outgoing)
             .for_each(|x| total_flow -= graphstate.flow[x.id().index()])
     });
-    //println!("{:?}", Dot::new(&graph));
     let mut sink_sum: NUM = zero();
     sinks.into_iter().for_each(|(_, demand)| sink_sum += demand);
     let status: Status;
