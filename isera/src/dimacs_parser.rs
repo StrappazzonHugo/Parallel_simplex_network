@@ -1,7 +1,7 @@
+use isera::basetypes::*;
 use petgraph::graph::*;
 use std::env;
 use std::fs;
-use isera::basetypes::*;
 
 pub fn parsed_graph<NUM: CloneableNum>() -> (
     DiGraph<u32, CustomEdgeIndices<NUM>>,
@@ -13,9 +13,7 @@ where
 {
     let args: Vec<String> = env::args().collect();
     let file_path = &args[1];
-    print!("{:?}", file_path);
-
-    let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
+    let contents = fs::read_to_string(file_path).expect("Unable to read file {:?}");
     let mut count = 0;
     let mut graph = DiGraph::<u32, CustomEdgeIndices<NUM>>::new();
     let mut sources: Vec<(usize, NUM)> = vec![];
