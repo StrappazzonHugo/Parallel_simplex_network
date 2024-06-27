@@ -1,6 +1,5 @@
 use crate::basetypes::*;
 
-use pivotrules::*;
 use itertools::Itertools;
 use num_traits::identities::one;
 use num_traits::identities::zero;
@@ -8,6 +7,7 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
+use pivotrules::*;
 use rayon::ThreadPoolBuilder;
 use std::any::*;
 
@@ -256,165 +256,6 @@ unsafe fn update_node_potentials<'a, NUM: CloneableNum>(
         current_node = *nodes.thread.get_unchecked(current_node);
     }
 }
-
-/*
-//computing delta the amount of flow we can augment through the cycle
-//returning the leaving edge
-fn __compute_flowchange<'a, NUM: CloneableNum>(
-    edges: &mut Edges<NUM>,
-    nodes: &mut Nodes<NUM>,
-    entering_arc: usize,
-    //(leaving_arc_id:usize, branch: 1 or 2)
-) -> (usize, usize) {
-    let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
-    let up_restricted = edges.flow[entering_arc] != zero();
-    let (node1, node2) = if up_restricted { (i, j) } else { (j, i) };
-    let (mut current1, mut current2) = (node1, node2);
-    let (mut cycle_part1, mut cycle_part2) = (vec![], vec![]);
-
-    //fill both vector part1 and part2 of the cycle
-    while current1 != current2 {
-        if nodes.depth[current1] < nodes.depth[current2] {
-            cycle_part2.push(nodes.edge_tree[current2]);
-            current2 = nodes.predecessor[current2].expect("found");
-        } else {
-            cycle_part1.push(nodes.edge_tree[current1]);
-            current1 = nodes.predecessor[current1].expect("found");
-        }
-        if nodes.predecessor[current1].is_some() && nodes.predecessor[current2].is_some() {
-            assert_eq!(
-                nodes.depth[current1],
-                nodes.depth[nodes.predecessor[current1].unwrap()] + 1
-            );
-            assert_eq!(
-                nodes.depth[current2],
-                nodes.depth[nodes.predecessor[current2].unwrap()] + 1
-            );
-        }
-    }
-
-    //fill vector of delta of arc in part 1 and 2
-    let (mut delta_p1, mut delta_p2): (Vec<(usize, NUM, NUM)>, Vec<(usize, NUM, NUM)>) = (
-        vec![(0, zero(), one()); cycle_part1.len()],
-        vec![(0, zero(), one()); cycle_part2.len()],
-    );
-    cycle_part1.iter().enumerate().for_each(|(index, &x)| {
-        let pred = nodes.predecessor[edges.source[x]];
-        delta_p1[index] = if pred.is_some() && edges.target[x] == pred.unwrap() {
-            (index, edges.capacity[x] - edges.flow[x], one())
-        } else {
-            (index, edges.flow[x], zero::<NUM>() - one())
-        }
-    });
-    cycle_part2.iter().enumerate().for_each(|(index, &x)| {
-        let pred = nodes.predecessor[edges.target[x]];
-        delta_p2[index] = if pred.is_some() && edges.source[x] == pred.unwrap() {
-            (index, edges.capacity[x] - edges.flow[x], one())
-        } else {
-            (index, edges.flow[x], zero::<NUM>() - one())
-        }
-    });
-    let min_d1 = delta_p1
-        .iter()
-        .min_set_by(|(_, delta1, _), (_, delta2, _)| delta1.partial_cmp(&delta2).unwrap());
-    let min_d2 = delta_p2
-        .iter()
-        .min_set_by(|(_, delta1, _), (_, delta2, _)| delta1.partial_cmp(&delta2).unwrap());
-
-    let leaving_p1 = min_d1
-        .into_iter()
-        .max_by(|(pos1, _, _), (pos2, _, _)| pos1.cmp(&pos2));
-    let leaving_p2 = min_d2
-        .into_iter()
-        .min_by(|(pos1, _, _), (pos2, _, _)| pos1.cmp(&pos2));
-
-    let leaving_set: usize;
-    let leaving_arc: usize;
-
-    let min_p1_p2 = if leaving_p1.is_none() {
-        leaving_set = 2;
-        leaving_p2.unwrap()
-    } else if leaving_p2.is_none() {
-        leaving_set = 1;
-        leaving_p1.unwrap()
-    } else if leaving_p1.unwrap().1 >= leaving_p2.unwrap().1 {
-        leaving_set = 2;
-        leaving_p2.unwrap()
-    } else {
-        leaving_set = 1;
-        leaving_p1.unwrap()
-    };
-
-    let delta_entering = if up_restricted {
-        edges.flow[entering_arc]
-    } else {
-        edges.capacity[entering_arc]
-    };
-
-    let mut final_delta = min_p1_p2.1;
-    if min_p1_p2.1 > delta_entering {
-        leaving_arc = entering_arc;
-        final_delta = delta_entering;
-    } else {
-        if leaving_set == 1 {
-            leaving_arc = cycle_part1[min_p1_p2.0];
-        } else {
-            // leaving_set == 2
-            leaving_arc = cycle_part2[min_p1_p2.0];
-        }
-    }
-
-    //Flow update
-    if final_delta != zero() {
-        cycle_part1
-            .iter()
-            .zip(delta_p1.iter())
-            .for_each(|(&edge_cycle, (_, _, dir))| {
-                edges.flow[edge_cycle] += *dir * final_delta;
-                if edges.flow[edge_cycle] == edges.capacity[edge_cycle] {
-                    edges.state[edge_cycle] = zero::<NUM>() - one()
-                }
-                if edges.flow[edge_cycle] == zero() {
-                    edges.state[edge_cycle] = one()
-                };
-            });
-        cycle_part2
-            .iter()
-            .zip(delta_p2.iter())
-            .for_each(|(&edge_cycle, (_, _, dir))| {
-                edges.flow[edge_cycle] += *dir * final_delta;
-                if edges.flow[edge_cycle] == edges.capacity[edge_cycle] {
-                    edges.state[edge_cycle] = zero::<NUM>() - one()
-                }
-                if edges.flow[edge_cycle] == zero() {
-                    edges.state[edge_cycle] = one()
-                };
-            });
-        if up_restricted {
-            edges.flow[entering_arc] -= final_delta;
-        } else {
-            edges.flow[entering_arc] += final_delta;
-        }
-    }
-    if edges.flow[entering_arc] == edges.capacity[entering_arc] {
-        edges.state[entering_arc] = zero::<NUM>() - one()
-    }
-    if edges.flow[entering_arc] == zero() {
-        edges.state[entering_arc] = one()
-    }
-
-    let branch = if up_restricted {
-        if leaving_set == 1 {
-            2
-        } else {
-            1
-        }
-    } else {
-        leaving_set
-    };
-
-    (leaving_arc, branch)
-}*/
 
 fn _compute_flowchange<'a, NUM: CloneableNum>(
     edges: &Edges<NUM>,
@@ -788,63 +629,48 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
-) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let (mut nodes, edges, mut graphstate) =
-        initialization::<NUM>(&mut graph, sources, sinks.clone());
-    solve(
-        &mut graph,
-        &edges,
-        &mut nodes,
-        &mut graphstate,
-        sinks,
-        pivotrule,
-        thread_nb,
-        scaling,
-    )
+) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+    let (nodes, edges, graphstate) = initialization::<NUM>(&mut graph, sources, sinks.clone());
+    let state: State<NUM> = State {
+        nodes_state: (nodes),
+        graph_state: (graphstate),
+        edges_state: (edges),
+        status: (Status::DemandGap),
+    };
+
+    solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
 pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
-    edges_state: &Edges<NUM>,
-    nodes_state: &Nodes<NUM>,
-    graph_state: &mut GraphState<NUM>,
+    state: State<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
-) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
-    let (edges, mut nodes, mut graphstate) =
-        (edges_state.clone(), nodes_state.clone(), graph_state);
-    solve(
-        &mut graph,
-        &edges,
-        &mut nodes,
-        &mut graphstate,
-        sinks,
-        pivotrule,
-        thread_nb,
-        scaling,
-    )
+) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+    solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
 //main algorithm function
 fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     graph: &mut DiGraph<u32, CustomEdgeIndices<NUM>>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-    graph_state: &mut GraphState<NUM>,
+    state: State<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
-) -> DiGraph<u32, CustomEdgeIndices<NUM>> {
+) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
     ThreadPoolBuilder::new()
         .num_threads(thread_nb)
         .build_global()
         .unwrap();
 
-
-    let (edges, mut nodes, mut graphstate) = (edges.clone(), nodes.clone(), graph_state);
+    let (edges, mut nodes, mut graphstate) = (
+        state.edges_state.clone(),
+        state.nodes_state.clone(),
+        state.graph_state,
+    );
 
     let multiply_factor = scaling;
     let divide_factor = 1;
@@ -859,8 +685,6 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
 
     let (mut _index, mut entering_arc) =
         pivotrule.find_entering_arc(&edges, &nodes, &graphstate, 0, _block_size);
-
-    
 
     while entering_arc.is_some() {
         let (leaving_arc, branch) =
@@ -902,6 +726,24 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
             .for_each(|x| total_flow -= graphstate.flow[x.id().index()])
     });
     //println!("{:?}", Dot::new(&graph));
-    print!(", flow = {:?}, cost = {:?}", total_flow, cost);
-    graph.clone()
+    let mut sink_sum: NUM = zero();
+    sinks.into_iter().for_each(|(_, demand)| sink_sum += demand);
+    let status: Status;
+    if total_flow == (zero::<NUM>() - sink_sum) {
+        status = Status::Optimal;
+    } else {
+        status = Status::DemandGap;
+    }
+
+    print!(
+        ", flow = {:?}, cost = {:?}, status = {:?}",
+        total_flow, cost, status
+    );
+    let state: State<NUM> = State {
+        nodes_state: (nodes.clone()),
+        graph_state: (graphstate.clone()),
+        edges_state: (edges),
+        status: (status),
+    };
+    (state, graphstate.flow.clone(), nodes.potential)
 }
