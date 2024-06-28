@@ -13,11 +13,14 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     let _file_path = &args[1];
+    print!("{:?}", _file_path);
+
     let mut nbproc: usize = 1;
     let mut kfactor: usize = 1;
-    if args.len() == 3 {
+    if args.len() >= 3 {
         nbproc = args[2].parse::<usize>().unwrap();
-    } else if args.len() == 4 {
+    } 
+    if args.len() >= 4 {
         kfactor = args[3].parse::<usize>().unwrap();
     }
 
