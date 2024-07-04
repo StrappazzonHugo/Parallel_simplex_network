@@ -11,6 +11,7 @@ pub trait CloneableNum:
     + PartialEq
     + std::fmt::Debug
     + num_traits::bounds::Bounded
+    + num_traits::cast::ToPrimitive
     + std::ops::AddAssign
     + std::ops::SubAssign
     + Sync
@@ -38,8 +39,7 @@ pub struct Edges<NUM: CloneableNum> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Nodes<NUM: CloneableNum> {
-    pub potential: Vec<NUM>,
+pub struct Nodes {
     pub thread: Vec<usize>,
     pub revthread: Vec<usize>,
     pub predecessor: Vec<Option<usize>>,
@@ -49,6 +49,7 @@ pub struct Nodes<NUM: CloneableNum> {
 
 #[derive(Debug, Clone)]
 pub struct GraphState<NUM: CloneableNum> {
+    pub potential: Vec<NUM>,
     pub out_base: Vec<usize>,
     pub flow: Vec<NUM>,
     pub state: Vec<NUM>,
@@ -70,7 +71,7 @@ pub enum Status {
 
 #[derive(Debug, Clone)]
 pub struct State<NUM: CloneableNum> {
-    pub nodes_state:Nodes<NUM>,
+    pub nodes_state:Nodes,
     pub graph_state:GraphState<NUM>,
     pub edges_state:Edges<NUM>,
     pub status:Status, 

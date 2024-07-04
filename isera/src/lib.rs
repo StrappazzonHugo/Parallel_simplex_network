@@ -10,6 +10,7 @@ use petgraph::stable_graph::IndexType;
 use pivotrules::*;
 use rayon::ThreadPoolBuilder;
 use std::any::*;
+use std::time::SystemTime;
 
 pub mod basetypes;
 pub mod pivotrules;
@@ -19,7 +20,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     graph: &'a mut DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
-) -> (Nodes<NUM>, Edges<NUM>, GraphState<NUM>) {
+) -> (Nodes, Edges<NUM>, GraphState<NUM>) {
     //println!("source_id = {:?}", sources);
     //println!("sink_id = {:?}", sinks);
     let mut total_supply_sources: NUM = zero();
@@ -98,7 +99,6 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
             edge_tree[node.index()] = arc.index();
         }
     }
-    let potentials: Vec<NUM> = compute_node_potentials(graph);
 
     let mut thread_id: Vec<usize> = vec![0; graph.node_count()];
     for i in 0..thread_id.len() - 1 {
@@ -117,8 +117,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     let mut depths: Vec<usize> = vec![1; graph.node_count()];
     depths[last] = 0;
 
-    let nodes: Nodes<NUM> = Nodes {
-        potential: (potentials),
+    let nodes: Nodes = Nodes {
         thread: (thread_id),
         revthread: (rev_thread_id),
         predecessor: (predecessors),
@@ -134,6 +133,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     let mut capacity: Vec<NUM> = vec![zero(); graph.edge_count()];
     let mut state: Vec<NUM> = vec![zero(); graph.edge_count()];
 
+    let potentials: Vec<NUM> = compute_node_potentials(graph);
     graph.edge_references().for_each(|x| {
         let id = x.id().index();
         source[id] = x.source().index();
@@ -161,6 +161,7 @@ fn initialization<'a, NUM: CloneableNum + 'static>(
     };
 
     let graphstate: GraphState<NUM> = GraphState {
+        potential: (potentials),
         out_base: (outbase),
         flow: (flow),
         state: (state),
@@ -221,45 +222,49 @@ fn compute_node_potentials<'a, NUM: CloneableNum>(
     pi
 }
 
-unsafe fn update_node_potentials<'a, NUM: CloneableNum>(
+unsafe fn _update_node_potentials<'a, NUM: CloneableNum>(
     edges: &Edges<NUM>,
-    nodes: &mut Nodes<NUM>,
+    nodes: &Nodes,
+    graphstate: &mut GraphState<NUM>,
     entering_arc: usize,
     leaving_arc: usize,
+    branch: bool,
 ) {
     if entering_arc == leaving_arc {
         return;
     }
     let (k, l) = (edges.source[entering_arc], edges.target[entering_arc]);
+    let (i, j) = (edges.source[leaving_arc], edges.target[leaving_arc]);
+    let start: usize = if nodes.depth[j] > nodes.depth[i] {
+        j
+    } else {
+        i
+    };
     let mut change: NUM = zero();
-    let start: usize;
-    if nodes.predecessor[k] == Some(l) {
+    if branch {
         change += unsafe {
-            *edges.cost.get_unchecked(entering_arc)
-                - *nodes.potential.get_unchecked(edges.source[entering_arc])
-                + *nodes.potential.get_unchecked(edges.target[entering_arc])
+            *edges.cost.get_unchecked(entering_arc) - *graphstate.potential.get_unchecked(k)
+                + *graphstate.potential.get_unchecked(l)
         };
-        start = k;
     } else {
         change -= unsafe {
-            *edges.cost.get_unchecked(entering_arc)
-                - *nodes.potential.get_unchecked(edges.source[entering_arc])
-                + *nodes.potential.get_unchecked(edges.target[entering_arc])
+            *edges.cost.get_unchecked(entering_arc) - *graphstate.potential.get_unchecked(k)
+                + *graphstate.potential.get_unchecked(l)
         };
-        start = l;
     }
     let mut current_node = nodes.thread[start];
     let depth = nodes.depth[start];
-    nodes.potential[start] += change;
+    graphstate.potential[start] += change;
     while *nodes.depth.get_unchecked(current_node) > depth {
-        *nodes.potential.get_unchecked_mut(current_node) += change;
+        *graphstate.potential.get_unchecked_mut(current_node) += change;
         current_node = *nodes.thread.get_unchecked(current_node);
     }
+
 }
 
 fn _compute_flowchange<'a, NUM: CloneableNum>(
     edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
+    nodes: &Nodes,
     graphstate: &mut GraphState<NUM>,
     entering_arc: usize,
 ) -> (usize, bool) {
@@ -413,20 +418,41 @@ fn _compute_flowchange<'a, NUM: CloneableNum>(
 * reorder predecessors to keep tree coherent tree structure from one basis
 * to another.
 */
-fn update_sptree<NUM: CloneableNum>(
+
+fn theloop(path_to_change: &Vec<usize>, nodes: &mut Nodes, dirty_rev_thread: &mut Vec<usize>) {
+    path_to_change
+        .iter()
+        .take(path_to_change.len() - 1)
+        .for_each(|&x| unsafe {
+            let mut current = *nodes.thread.get_unchecked(x.index());
+            let mut old_last = x;
+            while *nodes.depth.get_unchecked(current.index())
+                > *nodes.depth.get_unchecked(x.index())
+            {
+                old_last = current;
+                current = *nodes.thread.get_unchecked(current.index());
+            }
+            nodes.thread[nodes.revthread.get_unchecked(x.index()).index()] = current;
+            dirty_rev_thread.push(*nodes.revthread.get_unchecked(x.index()));
+            nodes.thread[old_last.index()] = nodes.predecessor.get_unchecked(x.index()).unwrap();
+            dirty_rev_thread.push(old_last);
+        });
+}
+
+fn update_tree_structures<NUM: CloneableNum>(
     edges: &Edges<NUM>,
-    nodes: &mut Nodes<NUM>,
+    nodes: &mut Nodes,
     graphstate: &mut GraphState<NUM>,
     entering_arc: usize,
     leaving_arc: usize,
-    position: Option<usize>,
     branch: bool,
+    position: Option<usize>
 ) {
     if leaving_arc == entering_arc {
         return;
     }
     //useful structure init
-    let node_nb = nodes.potential.len();
+    let node_nb = nodes.thread.len();
     let (i, j) = (edges.source[entering_arc], edges.target[entering_arc]);
     let (k, l) = (edges.source[leaving_arc], edges.target[leaving_arc]);
 
@@ -492,82 +518,59 @@ fn update_sptree<NUM: CloneableNum>(
     nodes.thread[nodeid_to_block.index()] = nodes.thread[block_parcour.last().unwrap().index()];
     dirty_rev_thread.push(nodeid_to_block);
 
-    path_to_change
-        .iter()
-        .take(path_to_change.len() - 1)
-        .for_each(|&x| unsafe {
-            let mut current = *nodes.thread.get_unchecked(x.index());
-            let mut old_last = x;
+    //TEST
+    if block_parcour[0] != i && block_parcour[0] != j {
+        theloop(path_to_change, nodes, &mut dirty_rev_thread);
+
+        let mut current = nodes.thread[path_to_change.last().unwrap().index()];
+        let mut old = *path_to_change.last().unwrap();
+        unsafe {
             while *nodes.depth.get_unchecked(current.index())
-                > *nodes.depth.get_unchecked(x.index())
+                > *nodes
+                    .depth
+                    .get_unchecked(path_to_change.last().unwrap().index())
             {
-                old_last = current;
+                old = current;
                 current = *nodes.thread.get_unchecked(current.index());
             }
-            nodes.thread[nodes.revthread.get_unchecked(x.index()).index()] = current;
-            dirty_rev_thread.push(*nodes.revthread.get_unchecked(x.index()));
-            nodes.thread[old_last.index()] = nodes.predecessor.get_unchecked(x.index()).unwrap();
-            dirty_rev_thread.push(old_last);
-        });
-
-    let mut current = nodes.thread[path_to_change.last().unwrap().index()];
-    let mut old = *path_to_change.last().unwrap();
-    unsafe {
-        while *nodes.depth.get_unchecked(current.index())
-            > *nodes
-                .depth
-                .get_unchecked(path_to_change.last().unwrap().index())
-        {
-            old = current;
-            current = *nodes.thread.get_unchecked(current.index());
         }
-    }
 
-    nodes.thread[old.index()] = nodes.thread[path_to_root[0].index()];
-    dirty_rev_thread.push(old);
-    nodes.thread[path_to_root[0].index()] = path_to_change[0];
-    dirty_rev_thread.push(path_to_root[0]);
+        nodes.thread[old.index()] = nodes.thread[path_to_root[0].index()];
+        dirty_rev_thread.push(old);
+        nodes.thread[path_to_root[0].index()] = path_to_change[0];
+        dirty_rev_thread.push(path_to_root[0]);
+    } else {
+        let connect_node = if block_parcour[0] == i { j } else { i };
+        let temp = nodes.thread[connect_node];
+        nodes.thread[connect_node] = block_parcour[0];
+        dirty_rev_thread.push(connect_node);
+        nodes.thread[*block_parcour.last().unwrap()] = temp;
+        dirty_rev_thread.push(*block_parcour.last().unwrap());
+    }
+    //
 
     dirty_rev_thread.into_iter().for_each(|new_rev| unsafe {
         nodes.revthread[nodes.thread.get_unchecked(new_rev.index()).index()] = new_rev
     });
 
     //Predecessors update + edge_tree
+    pred_edgetree_update(
+        entering_arc,
+        i,
+        j,
+        node_nb,
+        nodes,
+        path_to_change,
+        &path_from_i,
+        &path_from_j,
+    );
     if path_from_i[path_from_i.len() - 1] != node_nb - 1 {
-        nodes.predecessor[i.index()] = Some(j);
-        path_from_i
-            .iter()
-            .enumerate()
-            .skip(1)
-            .for_each(|(index, &x)| {
-                nodes.predecessor[x.index()] =
-                    unsafe { Some(*path_from_i.get_unchecked(index - 1)) }
-            });
         path_to_change = &path_from_i;
         path_to_root = &path_from_j;
     } else {
-        nodes.predecessor[j.index()] = Some(i);
-        path_from_j
-            .iter()
-            .enumerate()
-            .skip(1)
-            .for_each(|(index, &x)| {
-                nodes.predecessor[x.index()] =
-                    unsafe { Some(*path_from_j.get_unchecked(index - 1)) }
-            });
         path_to_root = &path_from_i;
         path_to_change = &path_from_j;
     }
-
-    let temp: Vec<usize> = path_to_change.iter().map(|&x| nodes.edge_tree[x]).collect();
-    nodes.edge_tree[path_to_change[0]] = entering_arc;
-    path_to_change
-        .iter()
-        .enumerate()
-        .skip(1)
-        .for_each(|(index, &x)| {
-            nodes.edge_tree[x] = unsafe { *temp.get_unchecked(index - 1) };
-        });
 
     //update depth
     nodes.depth[path_to_change[0].index()] = nodes.depth[path_to_root[0].index()] + 1;
@@ -579,50 +582,125 @@ fn update_sptree<NUM: CloneableNum>(
                 + 1
         }
     });
-    block_parcour.iter().for_each(|&x| {
-        nodes.depth[x.index()] = unsafe {
-            nodes
-                .depth
-                .get_unchecked(nodes.predecessor.get_unchecked(x.index()).unwrap().index())
-                + 1
-        }
-    });
 
+    let mut change: NUM = zero();
+    if branch {
+        change += unsafe {
+            *edges.cost.get_unchecked(entering_arc) - *graphstate.potential.get_unchecked(i)
+                + *graphstate.potential.get_unchecked(j)
+        };
+    } else {
+        change -= unsafe {
+            *edges.cost.get_unchecked(entering_arc) - *graphstate.potential.get_unchecked(i)
+                + *graphstate.potential.get_unchecked(j)
+        };
+    }
+
+    block_parcour.iter().for_each(|&x| unsafe {
+        *nodes.depth.get_unchecked_mut(x.index()) = nodes
+            .depth
+            .get_unchecked(nodes.predecessor.get_unchecked(x.index()).unwrap().index())
+            + 1;
+        *graphstate.potential.get_unchecked_mut(x.index()) += change;
+    });
     graphstate.out_base[position.unwrap()] = leaving_arc;
 }
 
-/*
-unsafe fn _best_eligible_in_block<NUM: CloneableNum>(
-    block: &Vec<usize>,
-    edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
-) -> Option<(usize, usize)> {
-    let (best_index, rc) = block
+fn pred_edgetree_update(
+    entering_arc: usize,
+    i: usize,
+    j: usize,
+    node_nb: usize,
+    nodes: &mut Nodes,
+    path_to_change: &Vec<usize>,
+    path_from_i: &Vec<usize>,
+    path_from_j: &Vec<usize>,
+) {
+    if path_from_i[path_from_i.len() - 1] != node_nb - 1 {
+        nodes.predecessor[i.index()] = Some(j);
+        path_from_i
+            .iter()
+            .enumerate()
+            .skip(1)
+            .for_each(|(index, &x)| {
+                nodes.predecessor[x.index()] =
+                    unsafe { Some(*path_from_i.get_unchecked(index - 1)) }
+            });
+    } else {
+        nodes.predecessor[j.index()] = Some(i);
+        path_from_j
+            .iter()
+            .enumerate()
+            .skip(1)
+            .for_each(|(index, &x)| {
+                nodes.predecessor[x.index()] =
+                    unsafe { Some(*path_from_j.get_unchecked(index - 1)) }
+            });
+    }
+
+    let temp: Vec<usize> = path_to_change.iter().map(|&x| nodes.edge_tree[x]).collect();
+    nodes.edge_tree[path_to_change[0]] = entering_arc;
+    path_to_change
         .iter()
         .enumerate()
-        .map(|(index, &arc)| {
-            (
-                index,
-                *edges.state.get_unchecked(arc)
-                    * (*edges.cost.get_unchecked(arc)
-                        - *nodes
-                            .potential
-                            .get_unchecked(*edges.source.get_unchecked(arc))
-                        + *nodes
-                            .potential
-                            .get_unchecked(*edges.target.get_unchecked(arc))),
-            )
-        })
-        .min_by(|x, y| x.1.partial_cmp(&y.1).unwrap())
-        .expect("found");
-    if rc >= zero() {
-        None
-    } else {
-        Some((best_index, block[best_index]))
-    }
-}*/
+        .skip(1)
+        .for_each(|(index, &x)| {
+            nodes.edge_tree[x] = unsafe { *temp.get_unchecked(index - 1) };
+        });
+}
 
-pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
+fn print_init<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
+    _pivotrule: PR,
+    thread_nb: usize,
+    scaling: usize,
+) {
+    println!("\nIsera network simplex algorithm ");
+    println!(
+        "PIVOT_RULE: {:?} THREAD_NB: {:?} K_FACTOR: {:?}, TYPE: {:?}, MAX_ITERATION: TODO\n",
+        std::any::type_name::<PR>().trim_start_matches("isera::pivotrules::"),
+        thread_nb,
+        scaling,
+        std::any::type_name::<NUM>()
+    );
+    println!("--------------------------------------------------------------------------");
+    println!("   Iteration                   Primal        Dual        Time      It/sec ");
+    println!("--------------------------------------------------------------------------");
+}
+
+fn print_status<NUM: CloneableNum + 'static>(
+    iteration: usize,
+    start: SystemTime,
+    graph: &DiGraph<u32, CustomEdgeIndices<NUM>>,
+    graphstate: &GraphState<NUM>,
+    edges: &Edges<NUM>,
+) {
+    let mut cost: f64 = zero();
+    graph.clone().edge_references().for_each(|x| {
+        cost += (graphstate.flow[x.id().index()] * edges.cost[x.id().index()])
+            .to_f64()
+            .unwrap();
+    });
+    let mut time: f64 = 0f64;
+    match start.elapsed() {
+        Ok(elapsed) => {
+            time = (elapsed.as_millis() as f64 / 1000f64) as f64;
+        }
+        Err(e) => {
+            println!("Error: {e:?}");
+        }
+    }
+
+    print!(
+        "{:>12}{:>25}{:>12}{:>12}{:>12}\n",
+        format!("{:?}", iteration),
+        format!("{:?}", cost),
+        format!("__"),
+        format!("{:.3}", time),
+        format!("{:.0}", (iteration as f64) / time),
+    );
+}
+
+pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     sources: Vec<(usize, NUM)>, //(node_id, demand)
     sinks: Vec<(usize, NUM)>,   //(node_id, demand)
@@ -630,6 +708,7 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+    print_init(pivotrule, thread_nb, scaling);
     let (nodes, edges, graphstate) = initialization::<NUM>(&mut graph, sources, sinks.clone());
     let state: State<NUM> = State {
         nodes_state: (nodes),
@@ -641,7 +720,7 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
-pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
+pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
     state: State<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
@@ -649,6 +728,7 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+    print_init(pivotrule, thread_nb, scaling);
     solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
@@ -661,6 +741,7 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+    let start = SystemTime::now();
     ThreadPoolBuilder::new()
         .num_threads(thread_nb)
         .build_global()
@@ -672,9 +753,11 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         state.graph_state,
     );
 
+    //multiply_factor and divide_factor change size of blocksize
     let multiply_factor = scaling;
     let divide_factor = 1;
 
+    //set block size such taht its either sqrt(|E|) or |E|/100
     let mut _block_size = multiply_factor
         * std::cmp::min(
             (graphstate.out_base.len() as f64).sqrt() as usize,
@@ -683,38 +766,43 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         / divide_factor as usize;
     let mut iteration = 0;
 
+    //first arc to enter
     let (mut _index, mut entering_arc) =
-        pivotrule.find_entering_arc(&edges, &nodes, &graphstate, 0, _block_size);
+        pivotrule.find_entering_arc(&edges, &graphstate, 0, _block_size);
 
     while entering_arc.is_some() {
+        //update flow + find leaving arc
         let (leaving_arc, branch) =
             _compute_flowchange(&edges, &nodes, &mut graphstate, entering_arc.unwrap());
 
-        update_sptree(
+        //potentials update
+       
+
+        //tree structure update
+        update_tree_structures(
             &edges,
             &mut nodes,
             &mut graphstate,
             entering_arc.unwrap(),
             leaving_arc,
-            _index,
             branch,
+            _index,
         );
 
-        unsafe { update_node_potentials(&edges, &mut nodes, entering_arc.unwrap(), leaving_arc) };
+        //printer
+        if iteration == 1 || (iteration != 0 && iteration % 5000000 == 0) {
+            print_status(iteration, start, graph, &graphstate, &edges)
+        }
 
+        //finding new arc for the next iteration
         (_index, entering_arc) =
-            pivotrule.find_entering_arc(&edges, &nodes, &graphstate, _index.unwrap(), _block_size);
+            pivotrule.find_entering_arc(&edges, &graphstate, _index.unwrap(), _block_size);
 
         iteration += 1;
     }
-    print!(", iterations = {:?}", iteration);
-    //graph.remove_node(NodeIndex::new(graph.node_count() - 1));
-    let mut cost: NUM = zero();
+
     let mut total_flow: NUM = zero();
-    graph.clone().edge_references().for_each(|x| {
-        graph.edge_weight_mut(x.id()).expect("found").flow = graphstate.flow[x.id().index()];
-        cost += graphstate.flow[x.id().index()] * edges.cost[x.id().index()];
-    });
+    graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     sinks.iter().for_each(|(index, _)| {
         graph
             .edges_directed(NodeIndex::new(*index), Incoming)
@@ -725,7 +813,7 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
             .edges_directed(NodeIndex::new(*index), Outgoing)
             .for_each(|x| total_flow -= graphstate.flow[x.id().index()])
     });
-    //println!("{:?}", Dot::new(&graph));
+
     let mut sink_sum: NUM = zero();
     sinks.into_iter().for_each(|(_, demand)| sink_sum += demand);
     let status: Status;
@@ -735,15 +823,15 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         status = Status::DemandGap;
     }
 
-    print!(
-        ", flow = {:?}, cost = {:?}, status = {:?}",
-        total_flow, cost, status
-    );
+    print_status(iteration, start, graph, &graphstate, &edges);
+    println!("--------------------------------------------------------------------------");
+    println!("STATUS: {:?}", status);
+
     let state: State<NUM> = State {
-        nodes_state: (nodes.clone()),
+        nodes_state: (nodes),
         graph_state: (graphstate.clone()),
         edges_state: (edges),
         status: (status),
     };
-    (state, graphstate.flow.clone(), nodes.potential)
+    (state, graphstate.flow.clone(), graphstate.potential)
 }

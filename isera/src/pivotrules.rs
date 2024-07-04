@@ -3,18 +3,23 @@ use num_traits::identities::zero;
 use rayon::prelude::*;
 use std::marker::PhantomData;
 
+#[derive(Debug, Clone, Copy)]
 pub struct BlockSearch<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
 }
+#[derive(Debug, Clone, Copy)]
 pub struct FirstEligible<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
 }
+#[derive(Debug, Clone, Copy)]
 pub struct BestEligible<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
 }
+#[derive(Debug, Clone, Copy)]
 pub struct ParallelBlockSearch<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
 }
+#[derive(Debug, Clone, Copy)]
 pub struct ParallelBestEligible<NUM: CloneableNum> {
     pub phantom: PhantomData<NUM>,
 }
@@ -23,7 +28,6 @@ pub trait PivotRules<NUM: CloneableNum> {
     fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
         graphstate: &GraphState<NUM>,
         index: usize,
         block_size: usize,
@@ -39,7 +43,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BestEligible<NUM> {
     fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
         graphstate: &GraphState<NUM>,
         _index: usize,
         _block_size: usize,
@@ -52,12 +55,12 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BestEligible<NUM> {
             let arc = unsafe { *graphstate.out_base.get_unchecked(i) };
             let rcplus = unsafe {
                 *edges.cost.get_unchecked(arc)
-                    + *nodes
+                    + *graphstate
                         .potential
                         .get_unchecked(*edges.target.get_unchecked(arc))
             };
             let rcminus = unsafe {
-                *nodes
+                *graphstate
                     .potential
                     .get_unchecked(*edges.source.get_unchecked(arc))
             };
@@ -85,7 +88,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BlockSearch<NUM> {
     fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
         graphstate: &GraphState<NUM>,
         mut index: usize,
         block_size: usize,
@@ -101,12 +103,12 @@ impl<NUM: CloneableNum> PivotRules<NUM> for BlockSearch<NUM> {
                 let arc = unsafe { *graphstate.out_base.get_unchecked(i) };
                 let rcplus = unsafe {
                     *edges.cost.get_unchecked(arc)
-                        + *nodes
+                        + *graphstate
                             .potential
                             .get_unchecked(*edges.target.get_unchecked(arc))
                 };
                 let rcminus = unsafe {
-                    *nodes
+                    *graphstate
                         .potential
                         .get_unchecked(*edges.source.get_unchecked(arc))
                 };
@@ -143,7 +145,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
     fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
         graphstate: &GraphState<NUM>,
         mut index: usize,
         block_size: usize,
@@ -163,12 +164,12 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
                 .map(|(pos, &arc)| {
                     let rcplus = unsafe {
                         *edges.cost.get_unchecked(arc)
-                            + *nodes
+                            + *graphstate
                                 .potential
                                 .get_unchecked(*edges.target.get_unchecked(arc))
                     };
                     let rcminus = unsafe {
-                        *nodes
+                        *graphstate
                             .potential
                             .get_unchecked(*edges.source.get_unchecked(arc))
                     };
@@ -209,17 +210,16 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
 fn get_rc_from_arc<NUM: CloneableNum>(
     arc: usize,
     edges: &Edges<NUM>,
-    nodes: &Nodes<NUM>,
     graphstate: &GraphState<NUM>,
 ) -> NUM {
     let rcplus = unsafe {
         *edges.cost.get_unchecked(arc)
-            + *nodes
+            + *graphstate
                 .potential
                 .get_unchecked(*edges.target.get_unchecked(arc))
     };
     let rcminus = unsafe {
-        *nodes
+        *graphstate
             .potential
             .get_unchecked(*edges.source.get_unchecked(arc))
     };
@@ -232,7 +232,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
     fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
         graphstate: &GraphState<NUM>,
         _index: usize,
         _block_size: usize,
@@ -244,12 +243,12 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBestEligible<NUM> {
             .iter()
             .enumerate()
             .min_by(|(_, &arc1), (_, &arc2)| {
-                get_rc_from_arc(arc1, edges, nodes, graphstate)
-                    .partial_cmp(&get_rc_from_arc(arc2, edges, nodes, graphstate))
+                get_rc_from_arc(arc1, edges, graphstate)
+                    .partial_cmp(&get_rc_from_arc(arc2, edges, graphstate))
                     .unwrap()
             });
         if candidate.is_some()
-            && get_rc_from_arc(*candidate.unwrap().1, edges, nodes, graphstate) < zero()
+            && get_rc_from_arc(*candidate.unwrap().1, edges, graphstate) < zero()
         {
             index = Some(candidate.unwrap().0);
             arc = Some(*candidate.unwrap().1);
@@ -311,7 +310,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
     fn find_entering_arc(
         &self,
         edges: &Edges<NUM>,
-        nodes: &Nodes<NUM>,
         graphstate: &GraphState<NUM>,
         index: usize,
         _block_size: usize,
@@ -320,8 +318,8 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
         for i in index + 1..graphstate.out_base.len() {
             let arc = graphstate.out_base[i];
             let rc = graphstate.state[arc]
-                * (edges.cost[arc] - nodes.potential[edges.source[arc]]
-                    + nodes.potential[edges.target[arc]]);
+                * (edges.cost[arc] - graphstate.potential[edges.source[arc]]
+                    + graphstate.potential[edges.target[arc]]);
             if rc < zero() {
                 return (Some(i), Some(arc));
             }
@@ -331,10 +329,10 @@ impl<NUM: CloneableNum> PivotRules<NUM> for FirstEligible<NUM> {
             let rc = unsafe {
                 *graphstate.state.get_unchecked(arc)
                     * (*edges.cost.get_unchecked(arc)
-                        - *nodes
+                        - *graphstate
                             .potential
                             .get_unchecked(*edges.source.get_unchecked(arc))
-                        + *nodes
+                        + *graphstate
                             .potential
                             .get_unchecked(*edges.target.get_unchecked(arc)))
             };

@@ -1,9 +1,8 @@
 use petgraph::graph::*;
-use std::env;
 use std::fs;
 use isera::basetypes::*;
 
-pub fn parsed_graph<NUM: CloneableNum>() -> (
+pub fn parsed_graph<NUM: CloneableNum>(filename:String) -> (
     DiGraph<u32, CustomEdgeIndices<NUM>>,
     Vec<(usize, NUM)>, // Vec<(usize, NUM)>
     Vec<(usize, NUM)>, // Vec<(usize, NUM)>
@@ -11,11 +10,7 @@ pub fn parsed_graph<NUM: CloneableNum>() -> (
 where
     <NUM as std::str::FromStr>::Err: std::fmt::Debug,
 {
-    let args: Vec<String> = env::args().collect();
-    let file_path = &args[1];
-    print!("{:?}", file_path);
-
-    let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
+    let contents = fs::read_to_string(filename).expect("Should have been able to read the file");
     let mut count = 0;
     let mut graph = DiGraph::<u32, CustomEdgeIndices<NUM>>::new();
     let mut sources: Vec<(usize, NUM)> = vec![];
