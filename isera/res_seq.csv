@@ -1,3 +1,0 @@
-"/home/hstrappa/Documents/graph/benchIsera/test//netgen_deg_12a.min", iterations = 122549, flow = 64000, cost = 1517558, time = 4.974, k = 1, nbproc = 1
-"/home/hstrappa/Documents/graph/benchIsera/test//netgen_lo_sr_16a.min", iterations = 306416, flow = 2560, cost = 1014789, time = 10.074, k = 1, nbproc = 1
-"/home/hstrappa/Documents/graph/benchIsera/test/netgen_deg_12a.min", iterations = 122549, flow = 64000, cost = 1517558, status = Optimal, time = 5.395, k = 1, nbproc = 1
