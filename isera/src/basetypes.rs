@@ -45,6 +45,7 @@ pub struct Nodes {
     pub predecessor: Vec<Option<usize>>,
     pub depth: Vec<usize>,
     pub edge_tree: Vec<usize>,
+    pub last: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
