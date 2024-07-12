@@ -25,7 +25,7 @@ fn main() {
     }
 
     let args = Args::parse();
-
+    let file = args.filename.clone();
     let _file_path: String = args.filename;
     let nbproc = args.nbproc;
     let kfactor = args.kfactor;
@@ -42,7 +42,7 @@ fn main() {
     let _par_bs: ParallelBlockSearch<i64> = ParallelBlockSearch {
         phantom: PhantomData,
     };
-
+    print!("{:?}, ", file);
     let _min_cost_flow;
     if nbproc == 1 {
         _min_cost_flow = min_cost(graph, sources, sinks, _seq_bs, nbproc, kfactor);
@@ -50,4 +50,5 @@ fn main() {
     } else {
         _min_cost_flow = min_cost(graph, sources, sinks, _par_bs, nbproc, kfactor);
     }
+    print!("k = {:?}, nbproc = {:?}\n", kfactor, nbproc);
 }

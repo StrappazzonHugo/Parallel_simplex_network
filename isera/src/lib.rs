@@ -813,7 +813,8 @@ fn print_status<NUM: CloneableNum + 'static>(
             println!("Error: {e:?}");
         }
     }
-
+    print!("iteration = {:?}, cost = {:?}, time = {:?}, ",iteration, cost, time);
+    /*
     print!(
         "{:>12}{:>25}{:>12}{:>12}{:>12}\n",
         format!("{:?}", iteration),
@@ -821,7 +822,7 @@ fn print_status<NUM: CloneableNum + 'static>(
         format!("__"),
         format!("{:.3}", time),
         format!("{:.0}", (iteration as f64) / time),
-    );
+    );*/
 }
 
 pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
@@ -832,7 +833,7 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
-    print_init(pivotrule, thread_nb, scaling);
+    //print_init(pivotrule, thread_nb, scaling);
     let (nodes, edges, graphstate) = initialization::<NUM>(&mut graph, sources, sinks.clone());
     let state: State<NUM> = State {
         nodes_state: (nodes),
@@ -852,7 +853,7 @@ pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Co
     thread_nb: usize,
     scaling: usize,
 ) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
-    print_init(pivotrule, thread_nb, scaling);
+    //print_init(pivotrule, thread_nb, scaling);
     solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
@@ -914,9 +915,10 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         );
 
         //printer
+        /*
         if iteration == 1 || (iteration != 0 && iteration % 5000000 == 0) {
             print_status(iteration, start, graph, &graphstate, &edges)
-        }
+        }*/
 
         //finding new arc for the next iteration
         (_index, entering_arc) =
@@ -947,9 +949,10 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     }
 
     print_status(iteration, start, graph, &graphstate, &edges);
+    /*
     println!("--------------------------------------------------------------------------");
     println!("STATUS: {:?}", status);
-
+    */
     let state: State<NUM> = State {
         nodes_state: (nodes),
         graph_state: (graphstate.clone()),
