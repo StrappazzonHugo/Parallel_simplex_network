@@ -10,8 +10,8 @@ time = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300,
         3600, 3700, 3800, 3900, 4000, 4100, 4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900, 5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100, 6200, 6300, 6400, 6500, 6600, 6700, 6800, 6900, 7000]
 
 
-plt.plot(time, isera_instances, label="isera", width=2)
-plt.plot(time, lemon_instances, label="lemon", linestyle='--', width=2)
+plt.plot(time, isera_instances, label="isera", linewidth=2)
+plt.plot(time, lemon_instances, label="lemon", linestyle='--', linewidth=2)
 plt.title("Distribution of running time on the XYZ test set")
 plt.grid()
 plt.xlabel("Time (s)")
