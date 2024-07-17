@@ -153,7 +153,6 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
         let mut entering_arc: Option<(usize, usize, NUM)>;
         let mut nb_block_checked = 0;
 
-        //let start = SystemTime::now();
         while nb_block_checked <= (graphstate.out_base.len() / block_size) + 1 {
             nb_block_checked += 1;
 
@@ -182,17 +181,9 @@ impl<NUM: CloneableNum> PivotRules<NUM> for ParallelBlockSearch<NUM> {
                     }
                 })
                 .min_by(|(_, _, rc1), (_, _, rc2)| (rc1).partial_cmp(&(rc2)).unwrap());
-            //.filter(|(_, _, rc)| *rc < zero())
 
             if entering_arc.is_some() && entering_arc.unwrap().2 < zero() {
-                /*match start.elapsed() {
-                    Ok(elapsed) => {
-                        println!("{:?}", elapsed.as_nanos());
-                    }
-                    Err(e) => {
-                        println!("Error: {e:?}");
-                    }
-                }*/
+                
                 return (
                     Some(index + entering_arc.unwrap().0),
                     Some(entering_arc.unwrap().1),

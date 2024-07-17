@@ -813,7 +813,10 @@ fn print_status<NUM: CloneableNum + 'static>(
             println!("Error: {e:?}");
         }
     }
-    print!("iteration = {:?}, cost = {:?}, time = {:?}, ",iteration, cost, time);
+    print!(
+        "iteration = {:?}, cost = {:?}, time = {:?}, ",
+        iteration, cost, time
+    );
     /*
     print!(
         "{:>12}{:>25}{:>12}{:>12}{:>12}\n",
@@ -948,7 +951,17 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         status = Status::DemandGap;
     }
 
-    print_status(iteration, start, graph, &graphstate, &edges);
+    //print_status(iteration, start, graph, &graphstate, &edges);
+    let mut time: f64 = 0f64;
+    match start.elapsed() {
+        Ok(elapsed) => {
+            time = (elapsed.as_millis() as f64 / 1000f64) as f64;
+        }
+        Err(e) => {
+            println!("Error: {e:?}");
+        }
+    }
+    print!("time = {:?}, ",time);
     /*
     println!("--------------------------------------------------------------------------");
     println!("STATUS: {:?}", status);
