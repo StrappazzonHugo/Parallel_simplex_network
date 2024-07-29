@@ -7,6 +7,7 @@ use petgraph::algo::bellman_ford;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::IndexType;
+use petgraph::visit::IntoNodeReferences;
 use pivotrules::*;
 use rayon::ThreadPoolBuilder;
 use std::any::*;
@@ -780,15 +781,15 @@ fn print_init<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
 ) {
     println!("\nIsera network simplex algorithm ");
     println!(
-        "PIVOT_RULE: {:?} THREAD_NB: {:?} K_FACTOR: {:?}, TYPE: {:?}, MAX_ITERATION: TODO\n",
+        "PIVOT_RULE: {:?} THREAD_NB: {:?} K_FACTOR: {:?}, TYPE: {:?}, MAX_ITERATION: NONE\n",
         std::any::type_name::<PR>().trim_start_matches("isera::pivotrules::"),
         thread_nb,
         scaling,
         std::any::type_name::<NUM>()
     );
-    println!("--------------------------------------------------------------------------");
-    println!("   Iteration                   Primal        Dual        Time      It/sec ");
-    println!("--------------------------------------------------------------------------");
+    println!("----------------------------------------------------------------");
+    println!("   Iteration               Total cost        Time      It/sec ");
+    println!("----------------------------------------------------------------");
 }
 
 fn print_status<NUM: CloneableNum + 'static>(
@@ -799,7 +800,7 @@ fn print_status<NUM: CloneableNum + 'static>(
     edges: &Edges<NUM>,
 ) {
     let mut cost: f64 = zero();
-    graph.clone().edge_references().for_each(|x| {
+    graph.edge_references().for_each(|x| {
         cost += (graphstate.flow[x.id().index()] * edges.cost[x.id().index()])
             .to_f64()
             .unwrap();
@@ -815,10 +816,9 @@ fn print_status<NUM: CloneableNum + 'static>(
     }
 
     print!(
-        "{:>12}{:>25}{:>12}{:>12}{:>12}\n",
+        "{:>12}{:>25}{:>12}{:>12}\n",
         format!("{:?}", iteration),
         format!("{:?}", cost),
-        format!("__"),
         format!("{:.3}", time),
         format!("{:.0}", (iteration as f64) / time),
     );
@@ -831,7 +831,7 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
-) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+) -> (State<NUM>, Vec<NUM>, Vec<NUM>, DiGraph<u32, CustomEdgeIndices<NUM>>) {
     print_init(pivotrule, thread_nb, scaling);
     let (nodes, edges, graphstate) = initialization::<NUM>(&mut graph, sources, sinks.clone());
     let state: State<NUM> = State {
@@ -840,19 +840,21 @@ pub fn min_cost<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
         edges_state: (edges),
         status: (Status::DemandGap),
     };
-
     solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
 pub fn min_cost_from_state<NUM: CloneableNum + 'static, PR: PivotRules<NUM> + Copy>(
     mut graph: DiGraph<u32, CustomEdgeIndices<NUM>>,
-    state: State<NUM>,
+    mut state: State<NUM>,
     sinks: Vec<(usize, NUM)>, //vec![(node_id, demand)]
+    new_costs: Vec<NUM>, 
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
-) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+) -> (State<NUM>, Vec<NUM>, Vec<NUM>, DiGraph<u32, CustomEdgeIndices<NUM>>) {
+    state.edges_state.cost = new_costs;
     print_init(pivotrule, thread_nb, scaling);
+
     solve(&mut graph, state, sinks, pivotrule, thread_nb, scaling)
 }
 
@@ -864,12 +866,9 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     pivotrule: PR,
     thread_nb: usize,
     scaling: usize,
-) -> (State<NUM>, Vec<NUM>, Vec<NUM>) {
+) -> (State<NUM>, Vec<NUM>, Vec<NUM>, DiGraph<u32, CustomEdgeIndices<NUM>>) {
     let start = SystemTime::now();
-    ThreadPoolBuilder::new()
-        .num_threads(thread_nb)
-        .build_global()
-        .unwrap();
+    ThreadPoolBuilder::new().num_threads(thread_nb);
 
     let (edges, mut nodes, mut graphstate) = (
         state.edges_state.clone(),
@@ -899,9 +898,6 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         let (leaving_arc, branch, join) =
             _compute_flowchange(&edges, &nodes, &mut graphstate, entering_arc.unwrap());
 
-        //potentials update
-        //tree structure update
-
         update_tree_structures(
             &edges,
             &mut nodes,
@@ -914,7 +910,7 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         );
 
         //printer
-        if iteration == 1 || (iteration != 0 && iteration % 5000000 == 0) {
+        if iteration == 1 || (iteration != 0 && iteration % 100000 == 0) {
             print_status(iteration, start, graph, &graphstate, &edges)
         }
 
@@ -926,7 +922,6 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     }
 
     let mut total_flow: NUM = zero();
-    graph.remove_node(NodeIndex::new(graph.node_count() - 1));
     sinks.iter().for_each(|(index, _)| {
         graph
             .edges_directed(NodeIndex::new(*index), Incoming)
@@ -948,7 +943,7 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
     }
 
     print_status(iteration, start, graph, &graphstate, &edges);
-    println!("--------------------------------------------------------------------------");
+    println!("----------------------------------------------------------------");
     println!("STATUS: {:?}", status);
 
     let state: State<NUM> = State {
@@ -957,5 +952,6 @@ fn solve<NUM: CloneableNum + 'static, PR: PivotRules<NUM>>(
         edges_state: (edges),
         status: (status),
     };
-    (state, graphstate.flow.clone(), graphstate.potential)
+    let new_graph = graph.clone();
+    (state, graphstate.flow.clone(), graphstate.potential, new_graph)
 }

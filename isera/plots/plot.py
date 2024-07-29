@@ -1,21 +1,45 @@
+# libraries
 import matplotlib.pyplot as plt
+import pandas as pd
 
-isera_instances = [4, 20, 25, 32, 32, 32, 32, 32, 33, 39, 40, 40, 40, 40, 40, 40, 40, 43, 44, 44, 44, 45, 45, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                   48, 48, 48, 49, 49, 50, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 53, 53, 53, 53, 54, 54, 56]
+# Data
+fig = plt.figure(figsize=(17, 10))
+r = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+raw_data = {'pivot rule': [0.65, 0.11, 0.24, 0.77, 0.63, 0.66, 0.47, 0.53, 0.31],
+            'compute flow': [0.24, 0.14, 0.04, 0.03, 0.09, 0.07, 0.08, 0.27, 0.1],
+            'update structures': [0.11, 0.75, 0.70, 0.05, 0.25, 0.13, 0.43, 0.18, 0.58],
+            'other': [0.00, 0.00, 0.02, 0.15, 0.04, 0.14, 0.02, 0.02, 0.01]}
+df = pd.DataFrame(raw_data)
 
+# From raw value to percentage
+totals = [i+j+k+l for i, j,
+          k, l in zip(df['pivot rule'], df['compute flow'], df['update structures'], df['other'])]
+pivot_rule = [i / j * 100 for i, j in zip(df['pivot rule'], totals)]
+comput_flow = [i / j * 100 for i, j in zip(df['compute flow'], totals)]
+update_struc = [i / j * 100 for i, j in zip(df['update structures'], totals)]
+other = [i / j * 100 for i, j in zip(df['other'], totals)]
 
-lemon_instances = [8, 24, 36, 36, 36, 40, 40, 40, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 46, 47,
-                   48, 48, 48, 51, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 52, 53, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 55, 56,
-                   56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56]
+# plot
+barWidth = 0.7
+names = ('grid_long_20', 'grid_square_20', 'netgen_8_20', 'netgen_deg_12', 'netgen_lo_8_20', 'netgen_lo_sr_16',
+         'netgen_sr_16', 'road graph',  'vision graph')
+# Create green Bars
+plt.bar(r, pivot_rule, color='#9d1f1f', edgecolor='white', width=barWidth, label="pivot rule")
+# Create orange Bars
+plt.bar(r, comput_flow, bottom=pivot_rule, color='#f6c681',
+        edgecolor='white', width=barWidth, label="compute flow")
+# Create blue Bars
+plt.bar(r, update_struc, bottom=[i+j for i, j in zip(pivot_rule, comput_flow)],
+        color='#4a7697', edgecolor='white', width=barWidth, label="update structures")
 
-time = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500,
-        3600, 3700, 3800, 3900, 4000, 4100, 4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900, 5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100, 6200, 6300, 6400, 6500, 6600, 6700, 6800, 6900, 7000,
-        7100, 7200, 7300, 7400, 7500, 7600, 7700, 7800, 7900, 8000, 8100, 8200, 8300, 8400, 8500, 8600, 8700, 8800]
+plt.bar(r, other, bottom=[i+j+k for i, j, k in zip(pivot_rule, comput_flow, update_struc)],
+        color='#184a70', edgecolor='white', width=barWidth, label="other")
 
-plt.plot(time, isera_instances, label="isera instances solved")
-plt.plot(time, lemon_instances, label="lemon instances solved")
+# Custom x axis
+plt.xticks(r, names)
+plt.xlabel("instances")
+plt.ylabel("%")
+plt.legend(loc='best', ncol=1, fontsize='large')
+plt.savefig("fig.pdf", format="pdf")
 
-plt.xscale("log")
-
-plt.legend()
-plt.show()
+# Show graphic

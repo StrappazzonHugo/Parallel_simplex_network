@@ -1,6 +1,7 @@
 use clap::Parser;
 use isera::pivotrules::*;
 use isera::*;
+//use rand::prelude::*;
 use std::marker::PhantomData;
 
 use crate::dimacs_parser::parsed_graph;
@@ -26,11 +27,13 @@ fn main() {
 
     let args = Args::parse();
 
-    let _file_path: String = args.filename;
+    let _file_path: String = args.filename.clone();
     let nbproc = args.nbproc;
     let kfactor = args.kfactor;
 
     let (graph, sources, sinks) = parsed_graph::<i64>(_file_path);
+
+    let sink_copy = sinks.clone();
 
     let _best: BestEligible<i64> = BestEligible {
         phantom: PhantomData,
@@ -43,11 +46,43 @@ fn main() {
         phantom: PhantomData,
     };
 
-    let _min_cost_flow;
+    let (mut _state, _flow, _potential, _new_graph);
     if nbproc == 1 {
-        _min_cost_flow = min_cost(graph, sources, sinks, _seq_bs, nbproc, kfactor);
+        (_state, _flow, _potential, _new_graph) =
+            min_cost(graph, sources, sink_copy, _seq_bs, nbproc, kfactor);
         //_min_cost_flow = min_cost(graph, sources, sinks, _best, nbproc, kfactor);
     } else {
-        _min_cost_flow = min_cost(graph, sources, sinks, _par_bs, nbproc, kfactor);
+        (_state, _flow, _potential, _new_graph) =
+            min_cost(graph, sources, sink_copy, _par_bs, nbproc, kfactor);
     }
+
+    /* WARM START EXAMPLE
+    println!("\nWarmStart");
+
+    //COST MODIFICATIONS
+    let mut rng = rand::thread_rng();
+    state.edges_state.cost.iter_mut().for_each(|x| {
+        let mut y: u64 = rng.gen();
+        let mut z: u64 = rng.gen();
+        y = y % 500;
+        z = z % 100;
+        if z < 50 {
+            *x = *x + y as i64;
+        } else {
+            if *x > y as i64 {
+                *x = *x - y as i64;
+            } else {
+                *x = *x + y as i64;
+            }
+        }
+    });
+
+    let new_costs = state.edges_state.cost.clone();
+
+    let (_state2, _flow2, _potential2, _graph2) =
+        min_cost_from_state(new_graph, state, sinks.clone(), new_costs, _seq_bs, 1, 1);
+
+    println!("{:?}", potential.len());
+    */
+    //println!("{:?}", potential);
 }
