@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Data
+plt.rcParams.update({'font.size': 27})
 fig = plt.figure(figsize=(17, 10))
 r = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 raw_data = {'pivot rule': [0.65, 0.11, 0.24, 0.77, 0.63, 0.66, 0.47, 0.53, 0.31],
@@ -21,8 +22,8 @@ other = [i / j * 100 for i, j in zip(df['other'], totals)]
 
 # plot
 barWidth = 0.7
-names = ('grid_long_20', 'grid_square_20', 'netgen_8_20', 'netgen_deg_12', 'netgen_lo_8_20', 'netgen_lo_sr_16',
-         'netgen_sr_16', 'road graph',  'vision graph')
+names = ('grid_long', 'grid_square', 'netgen_8', 'netgen_deg', 'netgen_lo_8', 'netgen_lo_sr',
+         'netgen_sr', 'road graph',  'vision graph')
 # Create green Bars
 plt.bar(r, pivot_rule, color='#9d1f1f', edgecolor='white', width=barWidth, label="pivot rule")
 # Create orange Bars
@@ -36,10 +37,10 @@ plt.bar(r, other, bottom=[i+j+k for i, j, k in zip(pivot_rule, comput_flow, upda
         color='#184a70', edgecolor='white', width=barWidth, label="other")
 
 # Custom x axis
-plt.xticks(r, names)
-plt.xlabel("instances")
-plt.ylabel("%")
-plt.legend(loc='best', ncol=1, fontsize='large')
+plt.xticks(r, names, fontsize = 16)
+plt.xlabel("instances", fontsize = 27)
+plt.ylabel("%", fontsize = 27)
+plt.legend(loc='best', ncol=1, prop = { "size": 24 })
 plt.savefig("fig.pdf", format="pdf")
 
 # Show graphic
