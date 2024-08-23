@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Data
-plt.rcParams.update({'font.size': 27})
+plt.rcParams.update({'font.size': 17})
 fig = plt.figure(figsize=(17, 10))
 r = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 raw_data = {'pivot rule': [0.65, 0.11, 0.24, 0.77, 0.63, 0.66, 0.47, 0.53, 0.31],
@@ -37,10 +37,10 @@ plt.bar(r, other, bottom=[i+j+k for i, j, k in zip(pivot_rule, comput_flow, upda
         color='#184a70', edgecolor='white', width=barWidth, label="other")
 
 # Custom x axis
-plt.xticks(r, names, fontsize = 16)
-plt.xlabel("instances", fontsize = 27)
-plt.ylabel("%", fontsize = 27)
-plt.legend(loc='best', ncol=1, prop = { "size": 24 })
+plt.xticks(r, names, fontsize = 12)
+plt.xlabel("instances", fontsize = 18)
+plt.ylabel("%", fontsize = 18)
+plt.legend(loc='best', ncol=1, prop = { "size": 16 })
 plt.savefig("fig.pdf", format="pdf")
 
 # Show graphic

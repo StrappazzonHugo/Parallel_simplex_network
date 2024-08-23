@@ -9,15 +9,15 @@ lemon_instances = [8, 12, 17, 20, 20, 24, 24, 24, 24, 24, 36, 36, 36, 40, 40, 40
 time = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200,
         3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000, 4100, 4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900, 5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100, 6200, 6300, 6400, 6500, 6600, 6700, 6800, 6900, 7000]
 
-plt.rcParams.update({'font.size': 27})
+plt.rcParams.update({'font.size': 18})
 fig = plt.figure(figsize=(17, 10))
 plt.plot(time, isera_instances, label="isera", linewidth=2)
 plt.plot(time, lemon_instances, label="lemon", linestyle='--', linewidth=2)
-plt.title("Distribution of running time on the min-cost flow instance set", fontsize=27)
+plt.title("Distribution of running time on the min-cost flow instance set", fontsize=20)
 plt.grid()
-plt.xlabel("Time (s)", fontsize=27)
+plt.xlabel("Time (s)", fontsize=18)
 plt.xscale("log")
-plt.ylabel("# instances", fontsize=27)
+plt.ylabel("# instances", fontsize=18)
 
-plt.legend(loc='best', ncol=1, prop = { "size": 27 })
+plt.legend(loc='best', ncol=1, prop = { "size": 18 })
 plt.savefig("instances_solved_by_time.pdf", format="pdf")
